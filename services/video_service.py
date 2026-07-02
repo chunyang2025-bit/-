@@ -95,7 +95,11 @@ class VideoService:
             self._render_with_ffmpeg(output, scenes, audio_path)
         except Exception as exc:
             self._render_storyboard_fallback(output, scenes)
-            raise RuntimeError(f"FFmpeg 无法生成 MP4，已输出分镜文本：{output.with_suffix('.storyboard.txt')}") from exc
+            raise RuntimeError(
+                "FFmpeg 无法生成 MP4，"
+                f"已输出分镜文本：{output.with_suffix('.storyboard.txt')}，"
+                f"错误日志：{output.with_suffix('.ffmpeg.log')}"
+            ) from exc
 
     def _render_with_ffmpeg(self, output: Path, scenes: list[dict], audio_path: Optional[Path]) -> None:
         work_dir = self.settings.tmp_dir / output.stem
@@ -128,12 +132,15 @@ class VideoService:
                     str(concat_file),
                     "-vsync",
                     "vfr",
+                    "-c:v",
+                    "libx264",
                     "-pix_fmt",
                     "yuv420p",
                     "-r",
                     "24",
                     str(silent_output),
-                ]
+                ],
+                output.with_suffix(".ffmpeg.log"),
             )
 
             if audio_path and audio_path.exists():
@@ -151,14 +158,24 @@ class VideoService:
                         "-c:a",
                         "aac",
                         str(output),
-                    ]
+                    ],
+                    output.with_suffix(".ffmpeg.log"),
                 )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
     @staticmethod
-    def _run_ffmpeg(command: list[str]) -> None:
+    def _run_ffmpeg(command: list[str], log_path: Path) -> None:
         result = subprocess.run(command, capture_output=True, text=True, check=False)
+        log_path.write_text(
+            "COMMAND\n"
+            + " ".join(command)
+            + "\n\nSTDOUT\n"
+            + result.stdout
+            + "\n\nSTDERR\n"
+            + result.stderr,
+            encoding="utf-8",
+        )
         if result.returncode != 0:
             raise RuntimeError(result.stderr[-1200:] or "ffmpeg failed")
 
