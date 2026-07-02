@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 家装一键成片系统</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <aside class="panel form-panel">
+          <div class="brand-row">
+            <div>
+              <p class="eyebrow">MCN 内部工具</p>
+              <h1>AI 家装一键成片</h1>
+            </div>
+            <span class="status-pill" id="apiStatus">检查中</span>
+          </div>
+
+          <form id="generateForm" class="form-grid">
+            <label>
+              <span>空间类型</span>
+              <select name="space_type">
+                <option>卧室</option>
+                <option selected>客厅</option>
+                <option>厨房</option>
+                <option>阳台</option>
+                <option>整屋小户型</option>
+              </select>
+            </label>
+
+            <label>
+              <span>房屋属性</span>
+              <select name="house_property">
+                <option selected>租房</option>
+                <option>自住</option>
+              </select>
+            </label>
+
+            <label>
+              <span>装修风格</span>
+              <select name="decor_style">
+                <option selected>奶油风</option>
+                <option>极简</option>
+                <option>原木</option>
+                <option>法式</option>
+                <option>现代</option>
+              </select>
+            </label>
+
+            <label>
+              <span>面积</span>
+              <input name="area_sqm" type="number" min="1" max="500" value="38" />
+            </label>
+
+            <div class="split">
+              <label>
+                <span>最低预算</span>
+                <input name="budget_min" type="number" min="0" value="3000" />
+              </label>
+              <label>
+                <span>最高预算</span>
+                <input name="budget_max" type="number" min="1" value="9000" />
+              </label>
+            </div>
+
+            <label>
+              <span>视频侧重点</span>
+              <select name="video_focus">
+                <option>收纳改造</option>
+                <option selected>平价软装</option>
+                <option>氛围感提升</option>
+                <option>极简省钱</option>
+              </select>
+            </label>
+
+            <button class="primary-btn" type="submit">
+              <i data-lucide="sparkles"></i>
+              <span>一键生成 AI 家装方案 + 视频</span>
+            </button>
+          </form>
+        </aside>
+
+        <section class="results">
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">生成结果</p>
+              <h2 id="resultTitle">等待生成</h2>
+            </div>
+            <a class="ghost-btn disabled" id="excelLink" href="#" target="_blank" rel="noreferrer">
+              <i data-lucide="file-spreadsheet"></i>
+              <span>采购表</span>
+            </a>
+          </div>
+
+          <div class="notice" id="notice">填写参数后开始生成，产物会在这里刷新。</div>
+
+          <div class="output-grid">
+            <article class="panel video-panel">
+              <div class="section-title">
+                <i data-lucide="video"></i>
+                <h3>成品视频</h3>
+              </div>
+              <video id="videoPreview" controls playsinline></video>
+            </article>
+
+            <article class="panel budget-panel">
+              <div class="section-title">
+                <i data-lucide="wallet-cards"></i>
+                <h3>双版本预算</h3>
+              </div>
+              <div class="budget-cards">
+                <div>
+                  <span>低配平价版</span>
+                  <strong id="lowBudget">-</strong>
+                </div>
+                <div>
+                  <span>高配质感版</span>
+                  <strong id="highBudget">-</strong>
+                </div>
+              </div>
+              <p id="budgetDiff" class="muted"></p>
+            </article>
+          </div>
+
+          <article class="panel">
+            <div class="section-title">
+              <i data-lucide="sofa"></i>
+              <h3>结构化软装方案</h3>
+            </div>
+            <p id="concept" class="copy-block"></p>
+            <div id="items" class="items-grid"></div>
+          </article>
+
+          <article class="panel">
+            <div class="section-title">
+              <i data-lucide="shopping-bag"></i>
+              <h3>真实商品匹配</h3>
+            </div>
+            <div id="products" class="product-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="section-title">
+              <i data-lucide="send"></i>
+              <h3>发布文案</h3>
+            </div>
+            <div id="copies" class="copy-grid"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

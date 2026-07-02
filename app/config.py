@@ -1,0 +1,62 @@
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    app_name: str = "AI 家装一键成片系统"
+    app_env: str = "local"
+    app_base_url: str = "http://127.0.0.1:8000"
+    secret_key: str = "change-me"
+
+    openai_api_key: Optional[str] = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: Optional[str] = None
+    openai_tts_model: Optional[str] = None
+
+    tbk_app_key: Optional[str] = None
+    tbk_app_secret: Optional[str] = None
+    tbk_adzone_id: Optional[str] = None
+    tbk_pid: Optional[str] = None
+    tbk_site_id: Optional[str] = None
+    tbk_api_url: str = "https://eco.taobao.com/router/rest"
+    tbk_min_commission_rate: int = 1000
+    tbk_min_sales: int = 20
+
+    video_width: int = 1080
+    video_height: int = 1920
+    log_retention_days: int = 180
+    rate_limit_per_minute: int = Field(default=20, ge=1)
+
+    storage_dir: Path = ROOT_DIR / "storage"
+    logs_dir: Path = ROOT_DIR / "storage" / "logs"
+    exports_dir: Path = ROOT_DIR / "storage" / "exports"
+    videos_dir: Path = ROOT_DIR / "storage" / "videos"
+    tmp_dir: Path = ROOT_DIR / "storage" / "tmp"
+
+    @property
+    def has_openai(self) -> bool:
+        return bool(self.openai_api_key)
+
+    @property
+    def has_tbk(self) -> bool:
+        return bool(self.tbk_app_key and self.tbk_app_secret and self.tbk_adzone_id)
+
+    def ensure_dirs(self) -> None:
+        for path in [self.storage_dir, self.logs_dir, self.exports_dir, self.videos_dir, self.tmp_dir]:
+            path.mkdir(parents=True, exist_ok=True)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    settings = Settings()
+    settings.ensure_dirs()
+    return settings

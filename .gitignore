@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+storage/logs/*.jsonl
+storage/exports/*
+storage/videos/*
+storage/tmp/*
+!storage/logs/.gitkeep
+!storage/exports/.gitkeep
+!storage/videos/.gitkeep
+!storage/tmp/.gitkeep
