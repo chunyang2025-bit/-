@@ -104,6 +104,14 @@ curl -s https://your-domain.com/api/health
 - `ok: true`
 - `openai_configured: true`
 - `tbk_configured: true`
+- `ffmpeg_available: true`
+
+运行一键生成 smoke 测试：
+
+```bash
+source .venv/bin/activate
+python scripts/smoke_test.py
+```
 
 同时手动生成一条视频，检查：
 

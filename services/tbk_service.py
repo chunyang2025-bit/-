@@ -1,5 +1,6 @@
 import hashlib
 import time
+from urllib.parse import quote_plus
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -77,7 +78,7 @@ class TaobaoTbkService:
                 original_price=float(raw.get("reserve_price") or price),
                 coupon_price=coupon_price,
                 image_url=self._normalize_image(raw.get("pict_url")),
-                item_url=raw.get("coupon_share_url") or raw.get("url") or raw.get("item_url") or "",
+                item_url=self._normalize_url(raw.get("coupon_share_url") or raw.get("url") or raw.get("item_url")),
                 shop_name=raw.get("shop_title") or "淘宝店铺",
                 commission_rate=float(raw.get("commission_rate") or 0) / 100,
                 sales=int(raw.get("volume") or 0),
@@ -107,6 +108,16 @@ class TaobaoTbkService:
             return f"https:{url}"
         return url
 
+    @staticmethod
+    def _normalize_url(url: Optional[str]) -> str:
+        if not url:
+            return ""
+        if url.startswith("//"):
+            return f"https:{url}"
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        return f"https://{url.lstrip('/')}"
+
     def _demo_products(self, item: DesignItem, budget_max: int) -> List[Product]:
         base = max(item.suggested_price_min, 1)
         upper = min(max(item.suggested_price_max, base), max(budget_max, base))
@@ -121,7 +132,7 @@ class TaobaoTbkService:
                     original_price=float(round(price * 1.2, 2)),
                     coupon_price=float(price),
                     image_url=None,
-                    item_url=f"https://s.taobao.com/search?q={item.taobao_keyword}",
+                    item_url=f"https://s.taobao.com/search?q={quote_plus(item.taobao_keyword)}",
                     shop_name="演示淘宝店铺",
                     commission_rate=12 + index,
                     sales=300 + index * 120,

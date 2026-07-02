@@ -25,6 +25,12 @@ ffmpeg -version
 
 同时检查 `storage/logs` 的最新日志。
 
+可在服务器上运行：
+
+```bash
+python scripts/smoke_test.py
+```
+
 ### 商品数量不足
 
 可调整：

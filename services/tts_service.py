@@ -15,7 +15,7 @@ class TtsService:
             return None
         model = self.settings.openai_tts_model or "gpt-4o-mini-tts"
         output = self.settings.tmp_dir / filename
-        payload = {"model": model, "voice": "alloy", "input": text, "format": "mp3"}
+        payload = {"model": model, "voice": "alloy", "input": text, "response_format": "mp3"}
         headers = {"Authorization": f"Bearer {self.settings.openai_api_key}"}
         try:
             async with httpx.AsyncClient(base_url=self.settings.openai_base_url, timeout=60) as client:

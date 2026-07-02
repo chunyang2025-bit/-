@@ -116,7 +116,7 @@ form.addEventListener("submit", async (event) => {
 
 api("/api/health")
   .then((health) => {
-    apiStatus.textContent = health.ok ? "在线" : "异常";
+    apiStatus.textContent = health.ffmpeg_available ? "在线" : "缺 FFmpeg";
     apiStatus.classList.toggle("ok", Boolean(health.ok));
   })
   .catch(() => {

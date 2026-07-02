@@ -74,4 +74,4 @@ Base URL：`https://your-domain.com`
 
 ## GET `/api/health`
 
-健康检查与关键 API 配置状态。
+健康检查与关键 API 配置状态，包含 OpenAI、TBK 和 FFmpeg 是否可用。

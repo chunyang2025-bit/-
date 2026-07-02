@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import Any, Dict
 
@@ -94,6 +95,7 @@ async def health() -> Dict[str, Any]:
         "env": settings.app_env,
         "openai_configured": settings.has_openai,
         "tbk_configured": settings.has_tbk,
+        "ffmpeg_available": bool(shutil.which("ffmpeg")),
     }
 
 

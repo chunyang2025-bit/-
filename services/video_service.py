@@ -1,9 +1,10 @@
+import shutil
+import subprocess
 import textwrap
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
@@ -29,6 +30,8 @@ class VideoService:
         narration = "。".join(scene["title"] + "，" + scene["body"] for scene in scenes)
         audio_path = await self.tts.synthesize(narration[:3600], filename.replace(".mp4", ".mp3"))
         self._render_movie(output, scenes, audio_path)
+        if not output.exists() or output.stat().st_size == 0:
+            raise RuntimeError(f"视频生成失败，未生成有效 MP4：{output}")
         return GeneratedVideo(
             video_url=f"/videos/{filename}",
             video_path=str(output),
@@ -89,23 +92,75 @@ class VideoService:
 
     def _render_movie(self, output: Path, scenes: list[dict], audio_path: Optional[Path]) -> None:
         try:
-            from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips
-
-            clips = []
-            for index, scene in enumerate(scenes):
-                frame = self._draw_scene(scene, index)
-                clip = ImageClip(np.array(frame)).set_duration(scene["duration"])
-                clips.append(clip)
-            video = concatenate_videoclips(clips, method="compose")
-            if audio_path and audio_path.exists():
-                audio = AudioFileClip(str(audio_path))
-                video = video.set_audio(audio.subclip(0, min(audio.duration, video.duration)))
-            video.write_videofile(str(output), fps=24, codec="libx264", audio_codec="aac", verbose=False, logger=None)
-            for clip in clips:
-                clip.close()
-            video.close()
-        except Exception:
+            self._render_with_ffmpeg(output, scenes, audio_path)
+        except Exception as exc:
             self._render_storyboard_fallback(output, scenes)
+            raise RuntimeError(f"FFmpeg 无法生成 MP4，已输出分镜文本：{output.with_suffix('.storyboard.txt')}") from exc
+
+    def _render_with_ffmpeg(self, output: Path, scenes: list[dict], audio_path: Optional[Path]) -> None:
+        work_dir = self.settings.tmp_dir / output.stem
+        work_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            concat_file = work_dir / "concat.txt"
+            frame_paths = []
+            for index, scene in enumerate(scenes):
+                frame_path = work_dir / f"scene_{index:02d}.png"
+                self._draw_scene(scene, index).save(frame_path)
+                frame_paths.append(frame_path)
+
+            lines = []
+            for frame_path, scene in zip(frame_paths, scenes):
+                lines.append(f"file '{frame_path}'")
+                lines.append(f"duration {scene['duration']}")
+            lines.append(f"file '{frame_paths[-1]}'")
+            concat_file.write_text("\n".join(lines), encoding="utf-8")
+
+            silent_output = work_dir / "silent.mp4" if audio_path and audio_path.exists() else output
+            self._run_ffmpeg(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_file),
+                    "-vsync",
+                    "vfr",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-r",
+                    "24",
+                    str(silent_output),
+                ]
+            )
+
+            if audio_path and audio_path.exists():
+                self._run_ffmpeg(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        str(silent_output),
+                        "-i",
+                        str(audio_path),
+                        "-shortest",
+                        "-c:v",
+                        "copy",
+                        "-c:a",
+                        "aac",
+                        str(output),
+                    ]
+                )
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    @staticmethod
+    def _run_ffmpeg(command: list[str]) -> None:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr[-1200:] or "ffmpeg failed")
 
     def _draw_scene(self, scene: dict, index: int) -> Image.Image:
         width, height = self.settings.video_width, self.settings.video_height
@@ -156,4 +211,4 @@ class VideoService:
     def _render_storyboard_fallback(output: Path, scenes: list[dict]) -> None:
         storyboard = output.with_suffix(".storyboard.txt")
         storyboard.write_text("\n\n".join(f"{s['title']}\n{s['body']}\n{s['price']}" for s in scenes), encoding="utf-8")
-        output.write_bytes(b"")
+        output.unlink(missing_ok=True)
