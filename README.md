@@ -9,6 +9,7 @@
 - `/api/search_products`：淘宝联盟 TBK 签名、鉴权、批量查询与过滤逻辑。
 - `/api/calc_budget`：低配平价版与高配质感版预算计算。
 - `/api/generate_video`：非数字人视频合成，含字幕卡片、价格卡片、来源与 AI 声明。
+- 视频逐品页会嵌入淘宝联盟返回的官方商品图；没有真实商品图时会明确显示占位状态。
 - `/api/export_excel`：采购清单 Excel 导出。
 - `/api/run_full_pipeline`：前端一键串完整流程。
 - 合规日志、基础限流、静态产物下载、演示降级数据。
@@ -39,6 +40,8 @@ http://127.0.0.1:8000
 python scripts/check_config.py
 python scripts/smoke_test.py
 ```
+
+`smoke_test.py` 会输出 `realtime_products` 和 `product_images`。上线发布前这两个数应大于 0，否则说明 TBK 没有返回真实可展示商品图或接口已回退演示数据。
 
 Ubuntu 服务器可直接运行：
 

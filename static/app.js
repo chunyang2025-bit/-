@@ -67,6 +67,13 @@ function render(data) {
       const product = match.products[0];
       return `
         <div class="product-row">
+          <div class="product-thumb">
+            ${
+              product && product.image_url
+                ? `<img src="${product.image_url}" alt="${product.title}" loading="lazy" />`
+                : `<span>无官方图</span>`
+            }
+          </div>
           <div>
             <strong>${match.design_item.name}</strong>
             <p>${product ? product.title : "未匹配到商品"}</p>

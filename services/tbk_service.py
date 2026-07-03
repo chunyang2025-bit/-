@@ -12,8 +12,10 @@ from app.models import DesignItem, Product, ProductMatch
 class TaobaoTbkService:
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.last_errors: List[str] = []
 
     async def search_matches(self, items: List[DesignItem], budget_max: int) -> List[ProductMatch]:
+        self.last_errors = []
         matches = []
         for item in items:
             products = await self.search_item(item, budget_max)
@@ -26,8 +28,9 @@ class TaobaoTbkService:
                 products = await self._search_tbk(item, budget_max)
                 if products:
                     return products[:3]
+                self.last_errors.append(f"{item.name}: TBK 返回商品为空或被筛选条件过滤")
             except Exception:
-                pass
+                self.last_errors.append(f"{item.name}: TBK 查询失败")
         return self._demo_products(item, budget_max)
 
     async def _search_tbk(self, item: DesignItem, budget_max: int) -> List[Product]:
@@ -71,13 +74,14 @@ class TaobaoTbkService:
             price = float(raw.get("zk_final_price") or raw.get("reserve_price") or 0)
             coupon_amount = float(raw.get("coupon_amount") or 0)
             coupon_price = max(price - coupon_amount, 0) if coupon_amount else price
+            image_url = raw.get("pict_url") or self._first_small_image(raw)
             return Product(
                 item_id=str(raw.get("num_iid") or raw.get("item_id")),
                 title=raw.get("title") or "淘宝在售商品",
                 price=price,
                 original_price=float(raw.get("reserve_price") or price),
                 coupon_price=coupon_price,
-                image_url=self._normalize_image(raw.get("pict_url")),
+                image_url=self._normalize_image(image_url),
                 item_url=self._normalize_url(raw.get("coupon_share_url") or raw.get("url") or raw.get("item_url")),
                 shop_name=raw.get("shop_title") or "淘宝店铺",
                 commission_rate=float(raw.get("commission_rate") or 0) / 100,
@@ -97,8 +101,17 @@ class TaobaoTbkService:
             and product.commission_rate >= self.settings.tbk_min_commission_rate / 100
             and product.sales >= self.settings.tbk_min_sales
             and product.item_url
+            and product.image_url
         ]
         return sorted(filtered, key=lambda product: (-product.sales, product.final_price))
+
+    @staticmethod
+    def _first_small_image(raw: Dict[str, Any]) -> Optional[str]:
+        small_images = raw.get("small_images") or {}
+        values = small_images.get("string") or []
+        if isinstance(values, list) and values:
+            return values[0]
+        return None
 
     @staticmethod
     def _normalize_image(url: Optional[str]) -> Optional[str]:

@@ -34,10 +34,18 @@ def main() -> int:
     assert excel_path.exists() and excel_path.stat().st_size > 0, excel_path
     assert data["design_plan"]["items"], "missing design items"
     assert data["products"]["matches"], "missing product matches"
+    products = [product for match in data["products"]["matches"] for product in match["products"]]
+    realtime_count = sum(1 for product in products if product["is_realtime"])
+    image_count = sum(1 for product in products if product.get("image_url"))
 
     print("SMOKE_OK")
     print(f"video={video_path}")
     print(f"excel={excel_path}")
+    print(f"products={len(products)}")
+    print(f"realtime_products={realtime_count}")
+    print(f"product_images={image_count}")
+    if data.get("warnings"):
+        print("warnings=" + " | ".join(data["warnings"]))
     return 0
 
 

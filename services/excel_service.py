@@ -17,7 +17,7 @@ class ExcelService:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "采购清单"
-        headers = ["单品", "材质", "尺寸", "搜索关键词", "商品名", "券后价", "原价", "佣金", "销量", "店铺", "来源", "直达链接"]
+        headers = ["单品", "材质", "尺寸", "搜索关键词", "商品名", "券后价", "原价", "佣金", "销量", "店铺", "来源", "商品图", "直达链接"]
         sheet.append(headers)
         for match in matches:
             for product in match.products:
@@ -34,6 +34,7 @@ class ExcelService:
                         product.sales,
                         product.shop_name,
                         product.source,
+                        product.image_url or "",
                         product.item_url,
                     ]
                 )

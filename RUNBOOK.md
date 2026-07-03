@@ -15,6 +15,16 @@
 
 说明服务器没有配置完整 TBK 凭证。上线内容不得使用演示数据。
 
+### 视频没有真实商品图
+
+先运行：
+
+```bash
+python scripts/smoke_test.py
+```
+
+检查 `realtime_products` 和 `product_images`。如果为 0，说明 TBK 未返回可用商品图，或商品被佣金、销量、预算、图片字段过滤掉了。
+
 ### 使用 DeepSeek 后没有配音
 
 DeepSeek 兼容接口用于文案/方案生成，不提供当前代码使用的 `/audio/speech` 配音接口。系统会自动生成无旁白视频；如需配音，接入阿里云/腾讯云 TTS 或支持语音接口的模型服务。

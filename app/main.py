@@ -147,6 +147,11 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
     realtime = bool(matches and all(product.is_realtime for match in matches for product in match.products))
     if not realtime:
         warnings.append("当前未配置完整 TBK 凭证，商品为演示数据；上线前必须配置淘宝联盟实时 API。")
+    if tbk_service.last_errors:
+        warnings.extend(tbk_service.last_errors[:5])
+    image_count = sum(1 for match in matches for product in match.products if product.image_url)
+    if image_count == 0:
+        warnings.append("本次商品未获取到官方商品图，视频会显示占位画面；请检查 TBK 返回字段或筛选条件。")
     if not settings.has_openai:
         warnings.append("当前未配置 OpenAI API Key，设计方案为本地确定性演示生成。")
 
