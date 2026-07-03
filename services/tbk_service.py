@@ -34,6 +34,25 @@ class TaobaoTbkService:
         return self._demo_products(item, budget_max)
 
     async def _search_tbk(self, item: DesignItem, budget_max: int) -> List[Product]:
+        raw_items: List[Dict[str, Any]] = []
+        for has_coupon in ["true", "false"]:
+            payload = await self._request_tbk(item.taobao_keyword, has_coupon)
+            error = payload.get("error_response")
+            if error:
+                self.last_errors.append(f"{item.name}: TBK 错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
+                continue
+            raw_items = (
+                payload.get("tbk_dg_material_optional_response", {})
+                .get("result_list", {})
+                .get("map_data", [])
+            )
+            if raw_items:
+                break
+
+        products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
+        return self._filter_products(products, item, budget_max)
+
+    async def _request_tbk(self, keyword: str, has_coupon: str) -> Dict[str, Any]:
         params = {
             "method": "taobao.tbk.dg.material.optional",
             "app_key": self.settings.tbk_app_key,
@@ -42,11 +61,11 @@ class TaobaoTbkService:
             "v": "2.0",
             "sign_method": "md5",
             "adzone_id": self.settings.tbk_adzone_id,
-            "q": item.taobao_keyword,
+            "q": keyword,
             "page_size": "20",
             "sort": "total_sales_des",
             "platform": "2",
-            "has_coupon": "true",
+            "has_coupon": has_coupon,
         }
         if self.settings.tbk_site_id:
             params["site_id"] = self.settings.tbk_site_id
@@ -54,14 +73,7 @@ class TaobaoTbkService:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(self.settings.tbk_api_url, params=params)
             response.raise_for_status()
-            payload = response.json()
-        raw_items = (
-            payload.get("tbk_dg_material_optional_response", {})
-            .get("result_list", {})
-            .get("map_data", [])
-        )
-        products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
-        return self._filter_products(products, item, budget_max)
+            return response.json()
 
     def _sign(self, params: Dict[str, Any]) -> str:
         assert self.settings.tbk_app_secret
@@ -94,16 +106,19 @@ class TaobaoTbkService:
 
     def _filter_products(self, products: List[Product], item: DesignItem, budget_max: int) -> List[Product]:
         max_item_price = min(item.suggested_price_max * 1.35, budget_max)
-        filtered = [
+        with_images = [product for product in products if product.item_url and product.image_url and product.final_price <= max_item_price]
+        strict = [
             product
-            for product in products
-            if product.final_price <= max_item_price
-            and product.commission_rate >= self.settings.tbk_min_commission_rate / 100
+            for product in with_images
+            if product.commission_rate >= self.settings.tbk_min_commission_rate / 100
             and product.sales >= self.settings.tbk_min_sales
-            and product.item_url
-            and product.image_url
         ]
-        return sorted(filtered, key=lambda product: (-product.sales, product.final_price))
+        if strict:
+            return sorted(strict, key=lambda product: (-product.sales, product.final_price))
+        if with_images and not self.settings.tbk_strict_filters:
+            self.last_errors.append(f"{item.name}: 使用真实带图商品备选，未完全满足佣金/销量严格筛选")
+            return sorted(with_images, key=lambda product: (-product.sales, product.final_price))
+        return []
 
     @staticmethod
     def _first_small_image(raw: Dict[str, Any]) -> Optional[str]:

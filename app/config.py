@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     tbk_api_url: str = "https://eco.taobao.com/router/rest"
     tbk_min_commission_rate: int = 1000
     tbk_min_sales: int = 20
+    tbk_strict_filters: bool = False
 
     video_width: int = 1080
     video_height: int = 1920

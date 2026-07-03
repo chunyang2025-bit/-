@@ -146,7 +146,10 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
     matches = await tbk_service.search_matches(design_plan.items, payload.budget_max)
     realtime = bool(matches and all(product.is_realtime for match in matches for product in match.products))
     if not realtime:
-        warnings.append("当前未配置完整 TBK 凭证，商品为演示数据；上线前必须配置淘宝联盟实时 API。")
+        if settings.has_tbk:
+            warnings.append("TBK 已配置，但本次没有匹配到符合条件的实时商品，已回退演示数据。")
+        else:
+            warnings.append("当前未配置完整 TBK 凭证，商品为演示数据；上线前必须配置淘宝联盟实时 API。")
     if tbk_service.last_errors:
         warnings.extend(tbk_service.last_errors[:5])
     image_count = sum(1 for match in matches for product in match.products if product.image_url)
