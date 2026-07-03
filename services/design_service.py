@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any, Dict
 
 import httpx
@@ -84,20 +85,23 @@ class DesignService:
         payload = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "你只生成符合 JSON Schema 的中文结构化家装软装方案。"},
+                {"role": "system", "content": "你只生成严格 JSON，不输出 Markdown，不输出解释文字。"},
                 {"role": "user", "content": prompt},
             ],
-            "response_format": {"type": "json_schema", "json_schema": DESIGN_SCHEMA},
             "temperature": 0.5,
         }
+        if self.settings.is_deepseek:
+            payload["response_format"] = {"type": "json_object"}
+        else:
+            payload["response_format"] = {"type": "json_schema", "json_schema": DESIGN_SCHEMA}
         headers = {"Authorization": f"Bearer {self.settings.openai_api_key}"}
         async with httpx.AsyncClient(base_url=self.settings.openai_base_url, timeout=45) as client:
             response = await client.post("/chat/completions", headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
         content = data["choices"][0]["message"]["content"]
-        plan = DesignPlan.model_validate(json.loads(content))
-        plan.generated_by = "openai"
+        plan = DesignPlan.model_validate(self._load_json(content))
+        plan.generated_by = "deepseek" if self.settings.is_deepseek else "openai"
         return self._normalize_keywords(plan, request)
 
     def _demo_plan(self, request: GenerateRequest, generated_by: str) -> DesignPlan:
@@ -153,3 +157,11 @@ class DesignService:
             normalized.append(item)
         plan.items = normalized
         return plan
+
+    @staticmethod
+    def _load_json(content: str) -> Dict[str, Any]:
+        content = content.strip()
+        if content.startswith("```"):
+            content = re.sub(r"^```(?:json)?\s*", "", content)
+            content = re.sub(r"\s*```$", "", content)
+        return json.loads(content)

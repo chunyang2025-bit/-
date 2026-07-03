@@ -19,7 +19,9 @@ def main() -> int:
         "env_file": (PROJECT_ROOT / ".env").exists(),
         "ffmpeg": bool(shutil.which("ffmpeg")),
         "openai_api_key": settings.has_openai,
-        "openai_model": bool(settings.openai_model),
+        "openai_model": bool((settings.openai_model or "").strip()),
+        "openai_base_url": bool((settings.openai_base_url or "").strip()),
+        "tts_available": settings.has_tts,
         "tbk_app_key": bool(settings.tbk_app_key),
         "tbk_app_secret": bool(settings.tbk_app_secret),
         "tbk_adzone_id": bool(settings.tbk_adzone_id),
@@ -34,6 +36,7 @@ def main() -> int:
     required_for_production = required_for_demo + [
         "openai_api_key",
         "openai_model",
+        "openai_base_url",
         "tbk_app_key",
         "tbk_app_secret",
         "tbk_adzone_id",

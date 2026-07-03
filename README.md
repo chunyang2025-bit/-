@@ -51,6 +51,7 @@ bash scripts/server_setup.sh
 - `OPENAI_API_KEY`：GPT 结构化方案与可选配音。
 - `OPENAI_MODEL`：结构化方案模型，建议按企业账号可用模型配置。
 - `OPENAI_TTS_MODEL`：配音模型，留空时使用代码默认值。
+- `OPENAI_BASE_URL`：兼容 OpenAI Chat Completions 的服务地址。使用 DeepSeek 时填 `https://api.deepseek.com/v1`，`OPENAI_MODEL=deepseek-chat`。
 - `TBK_APP_KEY` / `TBK_APP_SECRET` / `TBK_ADZONE_ID`：淘宝联盟 TOP/TBK 必填凭证。
 - `TBK_MIN_COMMISSION_RATE`：最低佣金比例，默认 `1000`，即 10%。
 - `TBK_MIN_SALES`：最低销量过滤阈值。
@@ -58,6 +59,8 @@ bash scripts/server_setup.sh
 - `LOG_RETENTION_DAYS`：合规日志保留天数，默认 180 天。
 
 ## 合规说明
+
+使用 DeepSeek 等兼容接口时，系统会用于结构化方案生成；当前配音仍需支持 `/audio/speech` 的服务，DeepSeek 配置下会自动跳过配音并生成无旁白视频。
 
 系统固定不做数字人出镜，不做爬虫缓存，不做自动发布。视频与 Excel 会标注：
 

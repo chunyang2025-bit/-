@@ -47,6 +47,14 @@ class Settings(BaseSettings):
         return bool(self.openai_api_key)
 
     @property
+    def is_deepseek(self) -> bool:
+        return "deepseek" in self.openai_base_url.lower()
+
+    @property
+    def has_tts(self) -> bool:
+        return self.has_openai and not self.is_deepseek
+
+    @property
     def has_tbk(self) -> bool:
         return bool(self.tbk_app_key and self.tbk_app_secret and self.tbk_adzone_id)
 

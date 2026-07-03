@@ -11,7 +11,7 @@ class TtsService:
         self.settings = settings
 
     async def synthesize(self, text: str, filename: str) -> Optional[Path]:
-        if not self.settings.has_openai:
+        if not self.settings.has_tts:
             return None
         model = self.settings.openai_tts_model or "gpt-4o-mini-tts"
         output = self.settings.tmp_dir / filename

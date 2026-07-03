@@ -43,6 +43,16 @@ TBK_APP_SECRET=replace-me
 TBK_ADZONE_ID=replace-me
 ```
 
+DeepSeek 兼容配置示例：
+
+```env
+OPENAI_API_KEY=replace-with-deepseek-key
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
+```
+
+DeepSeek 可用于结构化方案生成；如需 AI 配音，请额外接入支持语音合成的 OpenAI 兼容服务或云厂商 TTS。
+
 首次部署也可以直接运行项目内脚本，它会安装 Python 依赖、创建 `.env`、执行配置检查和 smoke 测试：
 
 ```bash
