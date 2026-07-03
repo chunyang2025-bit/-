@@ -43,6 +43,14 @@ python scripts/smoke_test.py
 
 `smoke_test.py` 会输出 `realtime_products` 和 `product_images`。上线发布前这两个数应大于 0，否则说明 TBK 没有返回真实可展示商品图或接口已回退演示数据。
 
+如 TBK 报 `Invalid signature`，先运行：
+
+```bash
+python scripts/tbk_debug.py
+```
+
+重点检查 `.env` 中 `TBK_APP_SECRET` 是否复制错误、包含空格、或与 `TBK_APP_KEY` 不匹配。
+
 Ubuntu 服务器可直接运行：
 
 ```bash

@@ -25,6 +25,16 @@ python scripts/smoke_test.py
 
 检查 `realtime_products` 和 `product_images`。如果为 0，说明 TBK 未返回可用商品图，或商品被佣金、销量、预算、图片字段过滤掉了。
 
+### TBK Invalid signature
+
+运行：
+
+```bash
+python scripts/tbk_debug.py
+```
+
+通常是 `.env` 中 `TBK_APP_KEY` 和 `TBK_APP_SECRET` 不匹配、复制错应用、或 Secret 前后带空格。当前系统会自动去除环境变量首尾空格，但错误 Key 仍需到淘宝联盟后台重新复制。
+
 ### 使用 DeepSeek 后没有配音
 
 DeepSeek 兼容接口用于文案/方案生成，不提供当前代码使用的 `/audio/speech` 配音接口。系统会自动生成无旁白视频；如需配音，接入阿里云/腾讯云 TTS 或支持语音接口的模型服务。

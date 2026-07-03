@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 from pydantic import Field
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,26 @@ class Settings(BaseSettings):
     exports_dir: Path = ROOT_DIR / "storage" / "exports"
     videos_dir: Path = ROOT_DIR / "storage" / "videos"
     tmp_dir: Path = ROOT_DIR / "storage" / "tmp"
+
+    @field_validator(
+        "openai_api_key",
+        "openai_base_url",
+        "openai_model",
+        "openai_tts_model",
+        "tbk_app_key",
+        "tbk_app_secret",
+        "tbk_adzone_id",
+        "tbk_pid",
+        "tbk_site_id",
+        "tbk_api_url",
+        mode="before",
+    )
+    @classmethod
+    def strip_env_strings(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
     @property
     def has_openai(self) -> bool:
