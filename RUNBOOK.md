@@ -28,6 +28,7 @@ ffmpeg -version
 可在服务器上运行：
 
 ```bash
+python scripts/check_config.py
 python scripts/smoke_test.py
 ```
 

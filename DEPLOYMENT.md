@@ -43,12 +43,18 @@ TBK_APP_SECRET=replace-me
 TBK_ADZONE_ID=replace-me
 ```
 
+首次部署也可以直接运行项目内脚本，它会安装 Python 依赖、创建 `.env`、执行配置检查和 smoke 测试：
+
+```bash
+bash scripts/server_setup.sh
+```
+
 ## 3. 启动服务
 
 本机验证：
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+bash scripts/run_server.sh
 ```
 
 systemd 示例：

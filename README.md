@@ -36,7 +36,14 @@ http://127.0.0.1:8000
 安装依赖后可运行 smoke 测试，脚本会调用一键全流程并确认 MP4 与 Excel 实际落盘：
 
 ```bash
+python scripts/check_config.py
 python scripts/smoke_test.py
+```
+
+Ubuntu 服务器可直接运行：
+
+```bash
+bash scripts/server_setup.sh
 ```
 
 ## 关键环境变量
