@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     render_api_secret: Optional[str] = None
     render_endpoint: str = "/v1/images/generations"
     render_auth_header: str = "Authorization"
-    render_auth_prefix: str = "Bearer"
+    render_auth_prefix: Optional[str] = "Bearer"
     render_model: str = "kling-v1"
     render_aspect_ratio: str = "16:9"
     render_poll_seconds: int = Field(default=120, ge=10)
