@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     def has_tbk(self) -> bool:
         return bool(self.tbk_app_key and self.tbk_app_secret and self.tbk_adzone_id)
 
+    def public_url(self, path: str) -> str:
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        return f"{self.app_base_url.rstrip('/')}/{path.lstrip('/')}"
+
     def ensure_dirs(self) -> None:
         for path in [self.storage_dir, self.logs_dir, self.exports_dir, self.videos_dir, self.renders_dir, self.tmp_dir]:
             path.mkdir(parents=True, exist_ok=True)

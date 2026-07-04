@@ -27,7 +27,7 @@ class RenderService:
             try:
                 await self._generate_with_kling(prompt, output)
                 return RenderedAsset(
-                    render_url=f"/renders/{filename}",
+                    render_url=self.settings.public_url(f"/renders/{filename}"),
                     render_path=str(output),
                     prompt=prompt,
                     provider="kling",
@@ -36,7 +36,7 @@ class RenderService:
             except Exception as exc:
                 self._draw_demo_render(output, request, plan, f"{prompt}｜Kling failed: {exc}")
                 return RenderedAsset(
-                    render_url=f"/renders/{filename}",
+                    render_url=self.settings.public_url(f"/renders/{filename}"),
                     render_path=str(output),
                     prompt=f"{prompt}｜Kling failed: {exc}",
                     provider="kling-fallback",
@@ -44,7 +44,7 @@ class RenderService:
                 )
         self._draw_demo_render(output, request, plan, prompt)
         return RenderedAsset(
-            render_url=f"/renders/{filename}",
+            render_url=self.settings.public_url(f"/renders/{filename}"),
             render_path=str(output),
             prompt=prompt,
             provider=self.settings.render_provider,

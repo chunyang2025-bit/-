@@ -37,7 +37,7 @@ class VideoService:
         if not output.exists() or output.stat().st_size == 0:
             raise RuntimeError(f"视频生成失败，未生成有效 MP4：{output}")
         return GeneratedVideo(
-            video_url=f"/videos/{filename}",
+            video_url=self.settings.public_url(f"/videos/{filename}"),
             video_path=str(output),
             duration_seconds=round(sum(scene["duration"] for scene in scenes), 2),
             compliance_caption="AI 设计方案仅供参考｜商品来源：淘宝官方在售商品｜价格为实时券后价，以官网为准｜本内容由 AI 自动生成",

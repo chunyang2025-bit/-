@@ -21,6 +21,7 @@ def main() -> int:
         "openai_api_key": settings.has_openai,
         "openai_model": bool((settings.openai_model or "").strip()),
         "openai_base_url": bool((settings.openai_base_url or "").strip()),
+        "app_base_url_public": settings.app_base_url.startswith("http://") or settings.app_base_url.startswith("https://"),
         "tts_available": settings.has_tts,
         "tbk_app_key": bool(settings.tbk_app_key),
         "tbk_app_secret": bool(settings.tbk_app_secret),

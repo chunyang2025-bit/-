@@ -157,7 +157,7 @@ async def generate_video(payload: GenerateVideoRequest) -> GeneratedVideo:
 async def export_excel(payload: ExportExcelRequest) -> ExportExcelResponse:
     path = excel_service.export(payload.design_plan, payload.product_matches, payload.budget)
     logger.write("excel_exported", {"excel_path": str(path)})
-    return ExportExcelResponse(excel_url=f"/exports/{Path(path).name}", excel_path=str(path))
+    return ExportExcelResponse(excel_url=settings.public_url(f"/exports/{Path(path).name}"), excel_path=str(path))
 
 
 @app.post("/api/run_full_pipeline", response_model=FullPipelineResponse, dependencies=[Depends(limited)])
@@ -188,7 +188,7 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
     budget = budget_service.calculate(matches)
     video = await video_service.generate(payload, design_plan, matches, budget, render)
     excel_path = excel_service.export(design_plan, matches, budget)
-    excel = ExportExcelResponse(excel_url=f"/exports/{excel_path.name}", excel_path=str(excel_path))
+    excel = ExportExcelResponse(excel_url=settings.public_url(f"/exports/{excel_path.name}"), excel_path=str(excel_path))
     copies = copy_service.build_publish_copies(payload, design_plan, budget)
     logger.write(
         "full_pipeline_completed",

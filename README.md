@@ -63,6 +63,20 @@ RENDER_ASPECT_RATIO=16:9
 
 配置后可先运行 `python scripts/render_debug.py` 单独测试效果图生成。
 
+如果后续使用图生视频或把装修图传给国内平台，必须确保图片 URL 可公网访问。请将 `APP_BASE_URL` 配成公网域名或公网 IP，例如：
+
+```env
+APP_BASE_URL=http://47.97.11.125:8000
+```
+
+然后运行：
+
+```bash
+python scripts/public_asset_debug.py
+```
+
+返回 `PUBLIC_ASSET_CHECK=true` 后，才能把 `/renders/...` 图片 URL 传给可灵等平台。
+
 如 TBK 报 `Invalid signature`，先运行：
 
 ```bash
