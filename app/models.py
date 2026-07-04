@@ -169,6 +169,14 @@ class TemplateGenerateRequest(GenerateRequest):
     template_keys: List[str] = Field(default_factory=list)
 
 
+class TemplateBatchGenerateRequest(BaseModel):
+    space_type: SpaceType
+    house_property: HouseProperty
+    area_sqm: float = Field(gt=0, le=500)
+    video_focus: VideoFocus
+    template_keys: List[str] = Field(default_factory=list)
+
+
 class StyleTemplate(BaseModel):
     key: str
     label: str

@@ -237,17 +237,22 @@ class VideoService:
         work_dir: Path,
     ) -> None:
         segment_paths: list[Path] = []
+        clip_usage: dict[str, int] = {}
         width, height = self.settings.video_width, self.settings.video_height
         for index, scene in enumerate(scenes):
-            duration = str(scene["duration"])
+            duration_seconds = float(scene["duration"])
+            duration = str(duration_seconds)
             segment_path = work_dir / f"segment_{index:02d}.mp4"
             clip_path = Path(scene["clip_path"]) if scene.get("clip_path") else None
             if clip_path and clip_path.exists():
+                usage = clip_usage.get(str(clip_path), 0)
+                clip_usage[str(clip_path)] = usage + 1
+                start = (usage * duration_seconds) % max(float(self.settings.render_duration), duration_seconds)
                 overlay_path = work_dir / f"overlay_{index:02d}.png"
                 self._draw_overlay_scene(scene, index).save(overlay_path)
                 filter_complex = (
                     f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                    f"crop={width}:{height},setsar=1,fps=24,trim=duration={duration},setpts=PTS-STARTPTS[bg];"
+                    f"crop={width}:{height},setsar=1,fps=24,trim=start={start}:duration={duration},setpts=PTS-STARTPTS[bg];"
                     "[1:v]format=rgba,setpts=PTS-STARTPTS[ov];"
                     "[bg][ov]overlay=0:0:format=auto[v]"
                 )

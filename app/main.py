@@ -20,7 +20,9 @@ from app.models import (
     ProductSearchRequest,
     ProductSearchResponse,
     RenderedAsset,
+    DecorStyle,
     TemplateGenerateRequest,
+    TemplateBatchGenerateRequest,
     TemplateLibraryResponse,
 )
 from app.rate_limit import InMemoryRateLimiter
@@ -156,6 +158,30 @@ async def generate_templates(payload: TemplateGenerateRequest) -> TemplateLibrar
             "decor_style": payload.decor_style.value,
             "space_type": payload.space_type.value,
             "templates": [template.key for template in templates],
+        },
+    )
+    return TemplateLibraryResponse(templates=templates)
+
+
+@app.post("/api/templates/generate_all_styles", response_model=TemplateLibraryResponse, dependencies=[Depends(limited)])
+async def generate_all_style_templates(payload: TemplateBatchGenerateRequest) -> TemplateLibraryResponse:
+    templates = []
+    for decor_style in DecorStyle:
+        request = GenerateRequest(
+            space_type=payload.space_type,
+            house_property=payload.house_property,
+            decor_style=decor_style,
+            area_sqm=payload.area_sqm,
+            budget_min=0,
+            budget_max=1,
+            video_focus=payload.video_focus,
+        )
+        templates.extend(await render_service.generate_style_templates(request, payload.template_keys))
+    logger.write(
+        "all_style_templates_generated",
+        {
+            "space_type": payload.space_type.value,
+            "templates": [template.decor_style for template in templates],
         },
     )
     return TemplateLibraryResponse(templates=templates)

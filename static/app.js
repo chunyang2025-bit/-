@@ -9,6 +9,7 @@ const renderVideoPreview = document.querySelector("#renderVideoPreview");
 const templateList = document.querySelector("#templateList");
 const refreshTemplatesBtn = document.querySelector("#refreshTemplates");
 const generateTemplatesBtn = document.querySelector("#generateTemplates");
+const generateAllTemplatesBtn = document.querySelector("#generateAllTemplates");
 
 function yuan(value) {
   return `¥${Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
@@ -124,6 +125,17 @@ function templatePayload() {
   };
 }
 
+function templateBatchPayload() {
+  const payload = formPayload();
+  return {
+    space_type: payload.space_type,
+    house_property: payload.house_property,
+    area_sqm: payload.area_sqm,
+    video_focus: payload.video_focus,
+    template_keys: ["overall"],
+  };
+}
+
 function renderTemplates(data) {
   const templates = data.templates || [];
   if (!templates.length) {
@@ -172,6 +184,23 @@ generateTemplatesBtn.addEventListener("click", async () => {
     setNotice(`模板生成失败：${error.message}`, "error");
   } finally {
     generateTemplatesBtn.disabled = false;
+  }
+});
+
+generateAllTemplatesBtn.addEventListener("click", async () => {
+  generateAllTemplatesBtn.disabled = true;
+  setNotice("正在生成全部装修风格模板；已缓存模板会直接复用...");
+  try {
+    const data = await api("/api/templates/generate_all_styles", {
+      method: "POST",
+      body: JSON.stringify(templateBatchPayload()),
+    });
+    renderTemplates(data);
+    setNotice("全部装修风格模板已更新。");
+  } catch (error) {
+    setNotice(`全部模板生成失败：${error.message}`, "error");
+  } finally {
+    generateAllTemplatesBtn.disabled = false;
   }
 });
 

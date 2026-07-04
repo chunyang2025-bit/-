@@ -134,6 +134,10 @@ h3 {
   gap: 10px;
 }
 
+.template-actions .wide {
+  grid-column: 1 / -1;
+}
+
 .compact {
   margin-top: 10px;
   font-size: 12px;
