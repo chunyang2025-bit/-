@@ -23,7 +23,7 @@ class RenderService:
         prompt = self._build_prompt(request, plan)
         filename = f"home_design_render_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         output = self.settings.renders_dir / filename
-        if self.settings.render_provider.lower() == "kling" and self.settings.render_api_key and self.settings.render_api_secret:
+        if self.settings.render_provider.lower() == "kling" and self.settings.render_api_key:
             try:
                 await self._generate_with_kling(prompt, output)
                 return RenderedAsset(
@@ -33,8 +33,15 @@ class RenderService:
                     provider="kling",
                     is_demo=False,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                self._draw_demo_render(output, request, plan, f"{prompt}｜Kling failed: {exc}")
+                return RenderedAsset(
+                    render_url=f"/renders/{filename}",
+                    render_path=str(output),
+                    prompt=f"{prompt}｜Kling failed: {exc}",
+                    provider="kling-fallback",
+                    is_demo=True,
+                )
         self._draw_demo_render(output, request, plan, prompt)
         return RenderedAsset(
             render_url=f"/renders/{filename}",
@@ -47,7 +54,7 @@ class RenderService:
     async def _generate_with_kling(self, prompt: str, output: Path) -> None:
         base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")
         headers = {
-            "Authorization": f"Bearer {self._kling_jwt()}",
+            "Authorization": f"Bearer {self._kling_token()}",
             "Content-Type": "application/json",
         }
         payload = {
@@ -107,6 +114,11 @@ class RenderService:
             hashlib.sha256,
         ).digest()
         return f"{signing_input}.{self._b64(signature)}"
+
+    def _kling_token(self) -> str:
+        if self.settings.render_api_secret:
+            return self._kling_jwt()
+        return self.settings.render_api_key or ""
 
     @staticmethod
     def _b64_json(payload: dict[str, Any]) -> str:

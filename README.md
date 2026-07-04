@@ -53,8 +53,7 @@ python scripts/smoke_test.py
 ```env
 RENDER_PROVIDER=kling
 RENDER_API_URL=https://api.klingai.com
-RENDER_API_KEY=你的可灵AccessKey
-RENDER_API_SECRET=你的可灵SecretKey
+RENDER_API_KEY=你的可灵APIKey
 RENDER_MODEL=kling-v1
 RENDER_ASPECT_RATIO=16:9
 ```
