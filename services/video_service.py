@@ -52,8 +52,8 @@ class VideoService:
         scenes = [
             {
                 "title": f"{request.area_sqm:g}㎡{request.decor_style.value}低成本改造",
-                "body": "真实可买软装清单｜逐件商品图展示｜一键生成视频与采购表",
-                "price": "官方商品图 + 淘宝来源",
+                "body": "软装清单｜逐件商品视觉展示｜一键生成视频与采购表",
+                "price": "TBK 未通过时使用虚拟商品演示",
                 "duration": 4,
                 "kind": "cover",
             },
@@ -259,10 +259,9 @@ class VideoService:
             image.paste(product_image, (90, 120))
             draw.rectangle([90, 120, 990, 1020], outline="#FFFFFF", width=4)
         else:
-            draw.rounded_rectangle([90, 120, 990, 1020], radius=18, fill="#EFE8DA")
-            draw.text((260, 520), "未获取到官方商品图", font=body_font, fill=ink)
+            self._draw_virtual_product(image, draw, scene, body_font, small_font, ink)
 
-        badge = "淘宝实时商品" if scene.get("is_realtime") else "演示数据"
+        badge = "淘宝实时商品" if scene.get("is_realtime") else "虚拟演示"
         badge_color = accent if scene.get("is_realtime") else "#8A6A2A"
         draw.rounded_rectangle([120, 1052, 410, 1116], radius=14, fill=badge_color)
         draw.text((146, 1065), badge, font=small_font, fill="#FFFFFF")
@@ -276,6 +275,51 @@ class VideoService:
         self._multiline(draw, scene["price"], 126, 1618, price_font, "#FFFFFF", 12, 70)
         meta = f"{scene.get('shop', '')}｜销量 {scene.get('sales', 0)}｜{scene.get('source', '')}"
         self._multiline(draw, meta, 112, 1775, small_font, ink, 27, 40)
+
+    def _draw_virtual_product(
+        self,
+        image: Image.Image,
+        draw: ImageDraw.ImageDraw,
+        scene: dict,
+        body_font: ImageFont.FreeTypeFont,
+        small_font: ImageFont.FreeTypeFont,
+        ink: str,
+    ) -> None:
+        draw.rounded_rectangle([90, 120, 990, 1020], radius=18, fill="#F4EFE6")
+        draw.rectangle([120, 840, 960, 900], fill="#D7C7AD")
+        draw.rectangle([140, 890, 940, 930], fill="#B99C78")
+        draw.rectangle([120, 930, 960, 960], fill="#8D7558")
+        title = scene.get("title", "")
+        color = "#B97852"
+        if "沙发" in title or "椅" in title:
+            draw.rounded_rectangle([230, 520, 820, 720], radius=40, fill=color)
+            draw.rounded_rectangle([180, 635, 870, 810], radius=34, fill="#D5A37C")
+            draw.rectangle([250, 800, 310, 900], fill="#7B5A3B")
+            draw.rectangle([740, 800, 800, 900], fill="#7B5A3B")
+        elif "灯" in title:
+            draw.rectangle([525, 440, 555, 835], fill="#6E5A43")
+            draw.ellipse([390, 285, 690, 505], fill="#F6D98C", outline="#8E6B3A", width=6)
+            draw.ellipse([450, 795, 630, 875], fill="#7B5A3B")
+        elif "窗帘" in title:
+            for x in range(210, 850, 90):
+                draw.rounded_rectangle([x, 250, x + 70, 840], radius=28, fill="#D9C8AE")
+            draw.rectangle([190, 235, 890, 260], fill="#7B5A3B")
+        elif "地毯" in title:
+            draw.rounded_rectangle([220, 560, 840, 810], radius=44, fill="#C96E4D")
+            draw.rounded_rectangle([270, 600, 790, 770], radius=36, outline="#F5D0B5", width=8)
+        elif "架" in title or "柜" in title:
+            draw.rounded_rectangle([300, 300, 780, 835], radius=20, fill="#C6A47C")
+            for y in [430, 560, 690]:
+                draw.rectangle([330, y, 750, y + 18], fill="#7B5A3B")
+            draw.rectangle([340, 835, 390, 920], fill="#7B5A3B")
+            draw.rectangle([690, 835, 740, 920], fill="#7B5A3B")
+        else:
+            draw.rounded_rectangle([280, 370, 800, 790], radius=38, fill=color)
+            draw.rounded_rectangle([330, 420, 750, 735], radius=30, fill="#E5B28A")
+
+        draw.rounded_rectangle([130, 145, 490, 210], radius=14, fill="#8A6A2A")
+        draw.text((154, 160), "虚拟商品演示图", font=small_font, fill="#FFFFFF")
+        draw.text((165, 950), "等待淘宝客物料权限通过后替换为官方商品图", font=small_font, fill=ink)
 
     @staticmethod
     def _fit_cover(source: Image.Image, size: tuple[int, int]) -> Image.Image:

@@ -71,7 +71,7 @@ function render(data) {
             ${
               product && product.image_url
                 ? `<img src="${product.image_url}" alt="${product.title}" loading="lazy" />`
-                : `<span>无官方图</span>`
+                : `<span>${product && !product.is_realtime ? "虚拟演示图" : "无官方图"}</span>`
             }
           </div>
           <div>

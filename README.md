@@ -43,6 +43,8 @@ python scripts/smoke_test.py
 
 `smoke_test.py` 会输出 `realtime_products` 和 `product_images`。上线发布前这两个数应大于 0，否则说明 TBK 没有返回真实可展示商品图或接口已回退演示数据。
 
+淘宝客物料权限审核期间，系统会使用明确标注的“虚拟商品演示”数据生成视频，便于演示端到端流程；该模式不可作为真实商品种草内容发布。
+
 如 TBK 报 `Invalid signature`，先运行：
 
 ```bash

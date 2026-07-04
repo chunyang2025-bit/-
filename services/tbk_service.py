@@ -164,7 +164,7 @@ class TaobaoTbkService:
                     shop_name="演示淘宝店铺",
                     commission_rate=12 + index,
                     sales=300 + index * 120,
-                    source="演示数据，接入 TBK 后替换为淘宝联盟实时商品",
+                    source="虚拟商品演示，非淘宝真实商品",
                     is_realtime=False,
                 )
             )
