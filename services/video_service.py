@@ -74,13 +74,17 @@ class VideoService:
                 {
                     "title": match.design_item.name,
                     "body": f"{match.design_item.material}｜{match.design_item.size}｜{match.design_item.scene}｜{match.design_item.role}",
+                    "material": match.design_item.material,
+                    "size": match.design_item.size,
+                    "scene": match.design_item.scene,
+                    "role": match.design_item.role,
                     "price": f"券后约 {product.final_price:.0f} 元" if product else "待匹配",
                     "shop": product.shop_name if product else "待匹配",
                     "sales": product.sales if product else 0,
                     "source": product.source if product else "无商品来源",
                     "is_realtime": bool(product and product.is_realtime),
                     "image_url": product.image_url if product else None,
-                    "product_title": product.title if product else "未匹配到商品",
+                    "product_title": product.title if product and product.is_realtime else "",
                     "duration": 5,
                     "kind": "product",
                     "clip_path": clip_map.get(match.design_item.name),
@@ -93,15 +97,6 @@ class VideoService:
                 "price": "价格以淘宝实时页面为准",
                 "duration": 5,
                 "kind": "budget",
-            }
-        )
-        scenes.append(
-            {
-                "title": "合规声明",
-                "body": "AI 设计方案仅供参考。商品来源淘宝官方在售商品。本内容由 AI 自动生成。",
-                "price": "可导出采购 Excel",
-                "duration": 5,
-                "kind": "compliance",
             }
         )
         return scenes
@@ -497,26 +492,25 @@ class VideoService:
         width, height = self.settings.video_width, self.settings.video_height
         image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
-        title_font = self._font(72)
+        title_font = self._font(66)
         body_font = self._font(38)
         price_font = self._font(58)
-        small_font = self._font(28)
+        small_font = self._font(26)
         accent = ["#D9633D", "#2F7A68", "#8060A8"][index % 3]
 
-        draw.rectangle([0, 0, width, 360], fill=(0, 0, 0, 96))
-        draw.rectangle([0, height - 420, width, height], fill=(0, 0, 0, 132))
-        draw.rounded_rectangle([64, 94, width - 64, 330], radius=24, fill=(255, 255, 255, 224))
-        self._multiline(draw, scene["title"], 104, 132, title_font, "#17211C", 11, 84)
-
         if scene.get("kind") == "product":
-            self._draw_product_overlay(image, draw, scene, body_font, price_font, small_font, accent)
+            self._draw_product_overlay(image, draw, scene, title_font, body_font, price_font, small_font, accent)
         else:
-            draw.rounded_rectangle([72, height - 360, width - 72, height - 185], radius=22, fill=(255, 255, 255, 214))
-            self._multiline(draw, scene["body"], 110, height - 326, body_font, "#17211C", 20, 54)
-            draw.rounded_rectangle([92, height - 160, width - 92, height - 82], radius=16, fill=accent)
-            self._multiline(draw, scene["price"], 128, height - 145, small_font, "#FFFFFF", 28, 38)
+            draw.rectangle([0, 0, width, 330], fill=(0, 0, 0, 96))
+            draw.rounded_rectangle([56, 82, width - 56, 292], radius=24, fill=(255, 255, 255, 224))
+            self._multiline(draw, scene["title"], 96, 118, title_font, "#17211C", 12, 78)
+            draw.rectangle([0, height - 360, width, height], fill=(0, 0, 0, 120))
+            draw.rounded_rectangle([72, height - 308, width - 72, height - 152], radius=22, fill=(255, 255, 255, 218))
+            self._multiline(draw, scene["body"], 110, height - 276, body_font, "#17211C", 20, 52)
+            draw.rounded_rectangle([92, height - 132, width - 92, height - 62], radius=16, fill=accent)
+            self._multiline(draw, scene["price"], 128, height - 120, small_font, "#FFFFFF", 28, 36)
 
-        draw.text((76, height - 52), "商品来源・淘宝｜AI 自动生成｜价格以官网为准｜AI 设计方案仅供参考", font=small_font, fill="#FFFFFF")
+        draw.text((76, height - 34), "AI效果仅供参考｜价格以商品页面为准", font=small_font, fill="#FFFFFF")
         return image
 
     def _draw_product_overlay(
@@ -524,6 +518,7 @@ class VideoService:
         image: Image.Image,
         draw: ImageDraw.ImageDraw,
         scene: dict,
+        title_font: ImageFont.FreeTypeFont,
         body_font: ImageFont.FreeTypeFont,
         price_font: ImageFont.FreeTypeFont,
         small_font: ImageFont.FreeTypeFont,
@@ -536,20 +531,33 @@ class VideoService:
             product_image = self._fit_cover(product_image.convert("RGB"), (430, 430)).convert("RGBA")
             frame = Image.new("RGBA", (470, 470), (255, 255, 255, 226))
             frame.paste(product_image, (20, 20))
-            image.alpha_composite(frame, (72, 420))
+            image.alpha_composite(frame, (72, 320))
         else:
-            draw.rounded_rectangle([72, 420, 590, 560], radius=22, fill=(255, 255, 255, 214))
-            draw.text((106, 454), "商品图待 TBK 权限通过后自动替换", font=small_font, fill="#17211C")
+            draw.rounded_rectangle([72, 320, 642, 400], radius=18, fill=(255, 255, 255, 218))
+            draw.text((108, 342), "待替换淘宝官方商品图", font=small_font, fill="#17211C")
 
-        draw.rounded_rectangle([72, height - 480, width - 72, height - 190], radius=24, fill=(255, 255, 255, 226))
-        self._multiline(draw, scene["body"], 112, height - 444, body_font, "#17211C", 20, 54)
+        draw.rectangle([0, height - 560, width, height], fill=(0, 0, 0, 124))
+        draw.rounded_rectangle([56, height - 520, width - 56, height - 122], radius=28, fill=(255, 255, 255, 232))
+        self._multiline(draw, scene["title"], 96, height - 486, title_font, "#17211C", 13, 76)
+
+        material_line = f"材质：{scene.get('material', '')}    尺寸：{scene.get('size', '')}"
+        self._multiline(draw, material_line, 96, height - 372, body_font, "#17211C", 22, 50)
+
+        role_line = f"搭配作用：{scene.get('role', '')}"
+        self._multiline(draw, role_line, 96, height - 302, body_font, "#17211C", 20, 50)
+
         product_title = scene.get("product_title") or ""
-        self._multiline(draw, product_title, 112, height - 315, small_font, "#4D4B45", 30, 38)
+        if product_title:
+            self._multiline(draw, product_title, 96, height - 236, small_font, "#4D4B45", 31, 34)
 
-        draw.rounded_rectangle([72, height - 170, width - 72, height - 80], radius=18, fill=accent)
-        self._multiline(draw, scene["price"], 112, height - 157, price_font, "#FFFFFF", 13, 66)
-        meta = f"{scene.get('shop', '')}｜销量 {scene.get('sales', 0)}｜{scene.get('source', '')}"
-        self._multiline(draw, meta, 112, height - 238, small_font, "#17211C", 28, 38)
+        draw.rounded_rectangle([96, height - 184, width - 96, height - 108], radius=18, fill=accent)
+        self._multiline(draw, scene["price"], 128, height - 170, price_font, "#FFFFFF", 13, 62)
+
+        if scene.get("is_realtime"):
+            meta = f"{scene.get('shop', '')}｜销量 {scene.get('sales', 0)}｜{scene.get('source', '')}"
+        else:
+            meta = "淘宝客物料权限通过后自动替换真实商品图和链接"
+        self._multiline(draw, meta, 96, height - 78, small_font, "#FFFFFF", 30, 32)
 
     def _draw_product_scene(
         self,
