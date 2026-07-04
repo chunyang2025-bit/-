@@ -120,7 +120,7 @@ function render(data) {
 function templatePayload() {
   return {
     ...formPayload(),
-    template_keys: ["overall", "seating", "table_storage", "lighting", "textile", "decor"],
+    template_keys: ["overall"],
   };
 }
 

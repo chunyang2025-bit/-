@@ -58,9 +58,9 @@ class VideoService:
         overall_clip = clip_map.get("overall") or next((clip.video_path for clip in render_clips if clip.kind == "overall"), None)
         scenes = [
             {
-                "title": f"{request.area_sqm:g}㎡{request.decor_style.value}低成本改造",
-                "body": plan.concept_summary,
-                "price": "AI 家装动态方案 + 单品视频清单",
+                "title": f"今天看一套{request.area_sqm:g}㎡小家",
+                "body": f"{request.decor_style.value}装修风格｜{plan.concept_summary}",
+                "price": "先看完整风格，再逐件放入软装商品",
                 "duration": 5,
                 "kind": "cover",
                 "render_path": render_path,
@@ -89,7 +89,7 @@ class VideoService:
                     "duration": 5,
                     "kind": "product",
                     "template_key": template_key,
-                    "clip_path": clip_map.get(template_key) or clip_map.get(match.design_item.name),
+                    "clip_path": overall_clip or clip_map.get(match.design_item.name),
                 }
             )
         scenes.append(

@@ -17,7 +17,7 @@ from app.models import DesignItem, DesignPlan, GenerateRequest, RenderedAsset, R
 
 class RenderService:
     TEMPLATE_LABELS = {
-        "overall": "整体空间",
+        "overall": "完整风格模板",
         "seating": "坐卧区",
         "table_storage": "茶几收纳区",
         "lighting": "灯光区",
@@ -136,7 +136,7 @@ class RenderService:
         return clips
 
     async def generate_style_templates(self, request: GenerateRequest, template_keys: list[str]) -> list[StyleTemplate]:
-        keys = template_keys or list(self.TEMPLATE_LABELS.keys())
+        keys = ["overall"]
         templates: list[StyleTemplate] = []
         cover_prompt = self._build_prompt(
             request,
@@ -184,6 +184,8 @@ class RenderService:
         manifest = self._read_template_manifest()
         templates: list[StyleTemplate] = []
         for entry in manifest.values():
+            if entry.get("key") != "overall":
+                continue
             path = Path(entry.get("video_path", ""))
             if path.exists():
                 templates.append(StyleTemplate(**entry))
@@ -191,17 +193,9 @@ class RenderService:
         return templates
 
     def _build_template_clip_specs(self, request: GenerateRequest, plan: DesignPlan, cover_prompt: str) -> list[tuple[str, str, str]]:
-        specs: list[tuple[str, str, str]] = [
+        return [
             ("template:overall", "overall", self._build_style_template_prompt(request, "overall", cover_prompt))
         ]
-        keys = []
-        for item in plan.items[: self.settings.render_product_clip_count]:
-            key = self._template_key_for_item(item)
-            if key not in keys:
-                keys.append(key)
-        for key in keys:
-            specs.append((f"template:{key}", key, self._build_style_template_prompt(request, key, cover_prompt)))
-        return specs
 
     def _template_video_filename(self, request: GenerateRequest, template_key: str) -> str:
         raw = "|".join(
@@ -529,8 +523,9 @@ class RenderService:
         )
         templates = {
             "overall": (
-                f"镜头 1, 2, {base}展示完整空间布局，镜头从门口缓慢推进;"
-                f"镜头 2, 3, {style}{space}整体软装氛围，沙发、茶几、灯光、窗帘统一搭配，真实可落地;"
+                f"镜头 1, 2, {base}展示完整小家空间布局，镜头从门口缓慢推进，预留商品展示区域;"
+                f"镜头 2, 3, {style}{space}完整装修风格模板，沙发、茶几、灯光、窗帘、地毯统一搭配，"
+                "画面干净真实，适合后期叠加不同商品图片、价格和字幕;"
             ),
             "seating": (
                 f"镜头 1, 2, {base}聚焦主要坐卧区，预留沙发或休闲椅位置，镜头平稳横移;"

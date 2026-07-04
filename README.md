@@ -68,7 +68,7 @@ RENDER_POLL_SECONDS=180
 
 配置后可先运行 `python scripts/render_debug.py` 单独测试。输出 `provider=kling-video`、`render_type=video`、`render_video=...mp4`，说明已走通可灵视频接口。
 
-默认启用模板模式：系统会按装修风格生成并缓存几类 5 秒模板视频，例如整体空间、坐卧区、茶几收纳区、灯光区、织物软装区；不同商品会匹配对应模板，再叠加商品名、材质、尺寸、价格和来源浮层。可通过 `RENDER_PRODUCT_CLIP_COUNT` 控制单次参与成片的商品数量，通过 `RENDER_REUSE_TEMPLATES=true` 复用已生成模板，减少可灵消耗。
+默认启用模板模式：系统会按装修风格生成并缓存一条完整风格模板视频；成片时先介绍“多少平米小家 + 什么装修风格”，再在同一套完整风格模板上逐个叠加商品名、材质、尺寸、价格和来源浮层。可通过 `RENDER_PRODUCT_CLIP_COUNT` 控制单次参与成片的商品数量，通过 `RENDER_REUSE_TEMPLATES=true` 复用已生成模板，减少可灵消耗。
 
 如果后续使用图生视频或把装修图传给国内平台，必须确保图片 URL 可公网访问。请将 `APP_BASE_URL` 配成公网域名或公网 IP，例如：
 
