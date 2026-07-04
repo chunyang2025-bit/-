@@ -4,6 +4,7 @@ const apiStatus = document.querySelector("#apiStatus");
 const resultTitle = document.querySelector("#resultTitle");
 const excelLink = document.querySelector("#excelLink");
 const videoPreview = document.querySelector("#videoPreview");
+const renderPreview = document.querySelector("#renderPreview");
 
 function yuan(value) {
   return `¥${Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
@@ -47,6 +48,8 @@ function render(data) {
   document.querySelector("#budgetDiff").textContent = data.budget.difference_summary;
 
   videoPreview.src = data.video.video_url;
+  renderPreview.src = data.render.render_url;
+  document.querySelector("#renderPrompt").textContent = data.render.prompt;
   excelLink.href = data.excel.excel_url;
   excelLink.classList.remove("disabled");
 

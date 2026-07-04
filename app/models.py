@@ -132,6 +132,7 @@ class GenerateVideoRequest(BaseModel):
     design_plan: DesignPlan
     product_matches: List[ProductMatch]
     budget: BudgetResponse
+    render: Optional["RenderedAsset"] = None
 
 
 class GeneratedVideo(BaseModel):
@@ -139,6 +140,14 @@ class GeneratedVideo(BaseModel):
     video_path: str
     duration_seconds: float
     compliance_caption: str
+
+
+class RenderedAsset(BaseModel):
+    render_url: str
+    render_path: str
+    prompt: str
+    provider: str
+    is_demo: bool = True
 
 
 class ExportExcelRequest(BaseModel):
@@ -162,6 +171,7 @@ class PublishCopy(BaseModel):
 class FullPipelineResponse(BaseModel):
     request: GenerateRequest
     design_plan: DesignPlan
+    render: RenderedAsset
     products: ProductSearchResponse
     budget: BudgetResponse
     video: GeneratedVideo

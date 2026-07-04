@@ -50,6 +50,16 @@ Base URL：`https://your-domain.com`
 
 请求体包含原始输入、设计方案、商品匹配和预算结果。
 
+## POST `/api/generate_render`
+
+生成装修效果图资产。当前默认返回本地演示图，字段包含：
+
+- `render_url`
+- `render_path`
+- `prompt`
+- `provider`
+- `is_demo`
+
 ## POST `/api/export_excel`
 
 导出采购 Excel。

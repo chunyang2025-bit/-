@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     tbk_min_sales: int = 20
     tbk_strict_filters: bool = False
 
+    render_provider: str = "demo"
+    render_api_url: Optional[str] = None
+    render_api_key: Optional[str] = None
+
     video_width: int = 1080
     video_height: int = 1920
     log_retention_days: int = 180
@@ -42,6 +46,7 @@ class Settings(BaseSettings):
     logs_dir: Path = ROOT_DIR / "storage" / "logs"
     exports_dir: Path = ROOT_DIR / "storage" / "exports"
     videos_dir: Path = ROOT_DIR / "storage" / "videos"
+    renders_dir: Path = ROOT_DIR / "storage" / "renders"
     tmp_dir: Path = ROOT_DIR / "storage" / "tmp"
 
     @field_validator(
@@ -55,6 +60,9 @@ class Settings(BaseSettings):
         "tbk_pid",
         "tbk_site_id",
         "tbk_api_url",
+        "render_provider",
+        "render_api_url",
+        "render_api_key",
         mode="before",
     )
     @classmethod
@@ -81,7 +89,7 @@ class Settings(BaseSettings):
         return bool(self.tbk_app_key and self.tbk_app_secret and self.tbk_adzone_id)
 
     def ensure_dirs(self) -> None:
-        for path in [self.storage_dir, self.logs_dir, self.exports_dir, self.videos_dir, self.tmp_dir]:
+        for path in [self.storage_dir, self.logs_dir, self.exports_dir, self.videos_dir, self.renders_dir, self.tmp_dir]:
             path.mkdir(parents=True, exist_ok=True)
 
 

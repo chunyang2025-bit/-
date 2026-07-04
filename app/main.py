@@ -19,6 +19,7 @@ from app.models import (
     GeneratedVideo,
     ProductSearchRequest,
     ProductSearchResponse,
+    RenderedAsset,
 )
 from app.rate_limit import InMemoryRateLimiter
 from services.budget_service import BudgetService
@@ -26,6 +27,7 @@ from services.copy_service import CopyService
 from services.design_service import DesignService
 from services.excel_service import ExcelService
 from services.logging_service import ComplianceLogger
+from services.render_service import RenderService
 from services.tbk_service import TaobaoTbkService
 from services.video_service import VideoService
 
@@ -39,6 +41,7 @@ tbk_service = TaobaoTbkService(settings)
 budget_service = BudgetService()
 excel_service = ExcelService(settings)
 video_service = VideoService(settings)
+render_service = RenderService(settings)
 copy_service = CopyService()
 
 app = FastAPI(title=settings.app_name, version="1.0.0")
@@ -54,6 +57,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=ROOT_DIR / "static"), name="static")
 app.mount("/exports", StaticFiles(directory=settings.exports_dir), name="exports")
 app.mount("/videos", StaticFiles(directory=settings.videos_dir), name="videos")
+app.mount("/renders", StaticFiles(directory=settings.renders_dir), name="renders")
 
 
 @app.middleware("http")
@@ -118,6 +122,23 @@ async def search_products(payload: ProductSearchRequest) -> ProductSearchRespons
     return ProductSearchResponse(matches=matches, realtime=realtime, source_note=source_note)
 
 
+@app.post("/api/generate_render", response_model=RenderedAsset, dependencies=[Depends(limited)])
+async def generate_render(payload: DesignPlan, request: Request) -> RenderedAsset:
+    query = request.query_params
+    render_input = GenerateRequest(
+        space_type=query.get("space_type", "客厅"),
+        house_property=query.get("house_property", "租房"),
+        decor_style=query.get("decor_style", "奶油风"),
+        area_sqm=float(query.get("area_sqm", 38)),
+        budget_min=int(query.get("budget_min", 3000)),
+        budget_max=int(query.get("budget_max", 9000)),
+        video_focus=query.get("video_focus", "平价软装"),
+    )
+    render = await render_service.generate(render_input, payload)
+    logger.write("render_generated", {"render_path": render.render_path, "provider": render.provider})
+    return render
+
+
 @app.post("/api/calc_budget", response_model=BudgetResponse, dependencies=[Depends(limited)])
 async def calc_budget(payload: ProductSearchResponse) -> BudgetResponse:
     budget = budget_service.calculate(payload.matches)
@@ -127,7 +148,7 @@ async def calc_budget(payload: ProductSearchResponse) -> BudgetResponse:
 
 @app.post("/api/generate_video", response_model=GeneratedVideo, dependencies=[Depends(limited)])
 async def generate_video(payload: GenerateVideoRequest) -> GeneratedVideo:
-    video = await video_service.generate(payload.input, payload.design_plan, payload.product_matches, payload.budget)
+    video = await video_service.generate(payload.input, payload.design_plan, payload.product_matches, payload.budget, payload.render)
     logger.write("video_generated", {"video_path": video.video_path, "duration": video.duration_seconds})
     return video
 
@@ -143,6 +164,7 @@ async def export_excel(payload: ExportExcelRequest) -> ExportExcelResponse:
 async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
     warnings = []
     design_plan = await design_service.generate(payload)
+    render = await render_service.generate(payload, design_plan)
     matches = await tbk_service.search_matches(design_plan.items, payload.budget_max)
     realtime = bool(matches and all(product.is_realtime for match in matches for product in match.products))
     if not realtime:
@@ -164,7 +186,7 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
         source_note="淘宝联盟 TBK 实时商品" if realtime else "演示商品数据；配置 TBK 后自动切换为实时商品",
     )
     budget = budget_service.calculate(matches)
-    video = await video_service.generate(payload, design_plan, matches, budget)
+    video = await video_service.generate(payload, design_plan, matches, budget, render)
     excel_path = excel_service.export(design_plan, matches, budget)
     excel = ExportExcelResponse(excel_url=f"/exports/{excel_path.name}", excel_path=str(excel_path))
     copies = copy_service.build_publish_copies(payload, design_plan, budget)
@@ -175,11 +197,13 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
             "realtime_products": realtime,
             "video_path": video.video_path,
             "excel_path": excel.excel_path,
+            "render_path": render.render_path,
         },
     )
     return FullPipelineResponse(
         request=payload,
         design_plan=design_plan,
+        render=render,
         products=products,
         budget=budget,
         video=video,

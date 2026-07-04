@@ -10,7 +10,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
-from app.models import BudgetResponse, DesignPlan, GenerateRequest, GeneratedVideo, ProductMatch
+from app.models import BudgetResponse, DesignPlan, GenerateRequest, GeneratedVideo, ProductMatch, RenderedAsset
 from services.tts_service import TtsService
 
 
@@ -25,10 +25,11 @@ class VideoService:
         plan: DesignPlan,
         matches: List[ProductMatch],
         budget: BudgetResponse,
+        render: Optional[RenderedAsset] = None,
     ) -> GeneratedVideo:
         filename = f"home_design_video_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
         output = self.settings.videos_dir / filename
-        scenes = self._build_scenes(request, plan, matches, budget)
+        scenes = self._build_scenes(request, plan, matches, budget, render)
         self._attach_product_images(scenes, output.stem)
         narration = "。".join(scene["title"] + "，" + scene["body"] for scene in scenes)
         audio_path = await self.tts.synthesize(narration[:3600], filename.replace(".mp4", ".mp3"))
@@ -48,21 +49,25 @@ class VideoService:
         plan: DesignPlan,
         matches: List[ProductMatch],
         budget: BudgetResponse,
+        render: Optional[RenderedAsset] = None,
     ) -> list[dict]:
+        render_path = render.render_path if render else None
         scenes = [
             {
                 "title": f"{request.area_sqm:g}㎡{request.decor_style.value}低成本改造",
                 "body": "软装清单｜逐件商品视觉展示｜一键生成视频与采购表",
-                "price": "TBK 未通过时使用虚拟商品演示",
+                "price": "AI 效果图 + 商品图混剪",
                 "duration": 4,
                 "kind": "cover",
+                "render_path": render_path,
             },
             {
                 "title": "整体方案",
                 "body": plan.concept_summary,
-                "price": request.video_focus.value,
+                "price": "装修效果图示意",
                 "duration": 8,
                 "kind": "plan",
+                "render_path": render_path,
             },
         ]
         per_item = matches[:7]
@@ -229,9 +234,17 @@ class VideoService:
         if scene.get("kind") == "product":
             self._draw_product_scene(image, draw, scene, title_font, body_font, price_font, small_font, ink, accent)
         else:
-            draw.rounded_rectangle([72, 170, width - 72, 430], radius=24, fill="#FFFFFF")
+            render_path = scene.get("render_path")
+            if render_path and Path(render_path).exists():
+                render_image = Image.open(render_path).convert("RGB")
+                render_image = self._fit_cover(render_image, (width, height))
+                image.paste(render_image, (0, 0))
+                overlay = Image.new("RGBA", (width, height), (0, 0, 0, 80))
+                image.paste(Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB"), (0, 0))
+                draw = ImageDraw.Draw(image)
+            draw.rounded_rectangle([72, 150, width - 72, 455], radius=24, fill="#FFFFFF")
             self._multiline(draw, scene["title"], 112, 215, title_font, ink, 11, 88)
-            self._multiline(draw, scene["body"], 92, 560, body_font, ink, 17, 62)
+            self._multiline(draw, scene["body"], 92, 550, body_font, "#FFFFFF" if render_path else ink, 17, 62)
             draw.rounded_rectangle([92, 1210, width - 92, 1360], radius=18, fill=accent)
             self._multiline(draw, scene["price"], 132, 1248, price_font, "#FFFFFF", 13, 72)
         draw.text((92, height - 170), "商品来源・淘宝｜AI 自动生成｜价格以官网为准", font=small_font, fill=ink)

@@ -30,8 +30,10 @@ def main() -> int:
 
     video_path = Path(data["video"]["video_path"])
     excel_path = Path(data["excel"]["excel_path"])
+    render_path = Path(data["render"]["render_path"])
     assert video_path.exists() and video_path.stat().st_size > 0, video_path
     assert excel_path.exists() and excel_path.stat().st_size > 0, excel_path
+    assert render_path.exists() and render_path.stat().st_size > 0, render_path
     assert data["design_plan"]["items"], "missing design items"
     assert data["products"]["matches"], "missing product matches"
     products = [product for match in data["products"]["matches"] for product in match["products"]]
@@ -40,6 +42,7 @@ def main() -> int:
 
     print("SMOKE_OK")
     print(f"video={video_path}")
+    print(f"render={render_path}")
     print(f"excel={excel_path}")
     print(f"products={len(products)}")
     print(f"realtime_products={realtime_count}")

@@ -9,8 +9,10 @@ __pycache__/
 storage/logs/*.jsonl
 storage/exports/*
 storage/videos/*
+storage/renders/*
 storage/tmp/*
 !storage/logs/.gitkeep
 !storage/exports/.gitkeep
 !storage/videos/.gitkeep
+!storage/renders/.gitkeep
 !storage/tmp/.gitkeep

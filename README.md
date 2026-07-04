@@ -9,6 +9,7 @@
 - `/api/search_products`：淘宝联盟 TBK 签名、鉴权、批量查询与过滤逻辑。
 - `/api/calc_budget`：低配平价版与高配质感版预算计算。
 - `/api/generate_video`：非数字人视频合成，含字幕卡片、价格卡片、来源与 AI 声明。
+- `/api/generate_render`：生成装修效果图资产。默认本地生成演示效果图，后续可替换为可灵、即梦、通义万相等图像/视频生成服务。
 - 视频逐品页会嵌入淘宝联盟返回的官方商品图；没有真实商品图时会明确显示占位状态。
 - `/api/export_excel`：采购清单 Excel 导出。
 - `/api/run_full_pipeline`：前端一键串完整流程。
@@ -44,6 +45,8 @@ python scripts/smoke_test.py
 `smoke_test.py` 会输出 `realtime_products` 和 `product_images`。上线发布前这两个数应大于 0，否则说明 TBK 没有返回真实可展示商品图或接口已回退演示数据。
 
 淘宝客物料权限审核期间，系统会使用明确标注的“虚拟商品演示”数据生成视频，便于演示端到端流程；该模式不可作为真实商品种草内容发布。
+
+当前装修效果图为本地生成的演示效果图，用于展示视频结构和空间氛围。接入外部图像/视频生成 API 后，可在 `RenderService` 内替换为真实 AI 生成效果图或图生视频。
 
 如 TBK 报 `Invalid signature`，先运行：
 
