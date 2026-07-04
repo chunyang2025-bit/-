@@ -53,10 +53,13 @@ class RenderService:
 
     async def _generate_with_kling(self, prompt: str, output: Path) -> None:
         base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")
+        endpoint = "/" + (self.settings.render_endpoint or "/v1/images/generations").lstrip("/")
         headers = {
-            "Authorization": f"Bearer {self._kling_token()}",
             "Content-Type": "application/json",
         }
+        token = self._kling_token()
+        auth_prefix = (self.settings.render_auth_prefix or "").strip()
+        headers[self.settings.render_auth_header or "Authorization"] = f"{auth_prefix} {token}".strip()
         payload = {
             "model_name": self.settings.render_model,
             "prompt": prompt,
@@ -65,8 +68,8 @@ class RenderService:
             "aspect_ratio": self.settings.render_aspect_ratio,
         }
         async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post(f"{base_url}/v1/images/generations", headers=headers, json=payload)
-            response.raise_for_status()
+            response = await client.post(f"{base_url}{endpoint}", headers=headers, json=payload)
+            self._raise_render_error(response)
             data = response.json()
             task_id = self._extract_task_id(data)
             if not task_id:
@@ -79,8 +82,8 @@ class RenderService:
             deadline = time.time() + self.settings.render_poll_seconds
             while time.time() < deadline:
                 await self._sleep(3)
-                poll = await client.get(f"{base_url}/v1/images/generations/{task_id}", headers=headers)
-                poll.raise_for_status()
+                poll = await client.get(f"{base_url}{endpoint}/{task_id}", headers=headers)
+                self._raise_render_error(poll)
                 poll_data = poll.json()
                 status = self._extract_status(poll_data)
                 if status in {"succeed", "success", "completed"}:
@@ -92,6 +95,14 @@ class RenderService:
                 if status in {"failed", "failure"}:
                     raise RuntimeError(f"Kling task failed: {poll_data}")
         raise TimeoutError("Kling render timed out")
+
+    @staticmethod
+    def _raise_render_error(response: httpx.Response) -> None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            body = response.text[:1200]
+            raise RuntimeError(f"{response.status_code} {response.reason_phrase}: {body}") from exc
 
     async def _download_render(self, client: httpx.AsyncClient, image_url: str, output: Path) -> None:
         response = await client.get(image_url, timeout=60, follow_redirects=True)

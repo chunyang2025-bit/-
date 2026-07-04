@@ -54,6 +54,9 @@ python scripts/smoke_test.py
 RENDER_PROVIDER=kling
 RENDER_API_URL=https://api.klingai.com
 RENDER_API_KEY=你的可灵APIKey
+RENDER_ENDPOINT=/v1/images/generations
+RENDER_AUTH_HEADER=Authorization
+RENDER_AUTH_PREFIX=Bearer
 RENDER_MODEL=kling-v1
 RENDER_ASPECT_RATIO=16:9
 ```
