@@ -82,22 +82,30 @@ class RenderService:
         cover_prompt: str,
     ) -> list[RenderedClip]:
         base_name = image_filename.replace(".jpg", "")
-        clip_specs: list[tuple[str, str, str]] = [
-            (
-                "overall",
-                "整体方案",
-                self._build_video_prompt(cover_prompt, self.settings.render_duration),
-            )
-        ]
-        if self.settings.render_product_clips:
-            for item in plan.items[: self.settings.render_product_clip_count]:
-                clip_specs.append(("product", item.name, self._build_item_video_prompt(request, item)))
+        if self.settings.render_template_mode:
+            clip_specs = self._build_template_clip_specs(request, plan, cover_prompt)
+        else:
+            clip_specs: list[tuple[str, str, str]] = [
+                (
+                    "overall",
+                    "整体方案",
+                    self._build_video_prompt(cover_prompt, self.settings.render_duration),
+                )
+            ]
+            if self.settings.render_product_clips:
+                for item in plan.items[: self.settings.render_product_clip_count]:
+                    clip_specs.append(("product", item.name, self._build_item_video_prompt(request, item)))
 
         clips: list[RenderedClip] = []
         for index, (kind, title, clip_prompt) in enumerate(clip_specs):
-            video_filename = f"{base_name}_{index:02d}_{kind}.mp4"
+            if self.settings.render_template_mode and self.settings.render_reuse_templates:
+                video_filename = self._template_video_filename(request, title)
+            else:
+                video_filename = f"{base_name}_{index:02d}_{kind}.mp4"
             video_output = self.settings.renders_dir / video_filename
-            task_id = await self._generate_video_with_kling(clip_prompt, video_output)
+            task_id = "cached-template" if video_output.exists() and video_output.stat().st_size > 0 else None
+            if not task_id:
+                task_id = await self._generate_video_with_kling(clip_prompt, video_output)
             clips.append(
                 RenderedClip(
                     title=title,
@@ -109,6 +117,35 @@ class RenderService:
                 )
             )
         return clips
+
+    def _build_template_clip_specs(self, request: GenerateRequest, plan: DesignPlan, cover_prompt: str) -> list[tuple[str, str, str]]:
+        specs: list[tuple[str, str, str]] = [
+            ("template:overall", "overall", self._build_style_template_prompt(request, "overall", cover_prompt))
+        ]
+        keys = []
+        for item in plan.items[: self.settings.render_product_clip_count]:
+            key = self._template_key_for_item(item)
+            if key not in keys:
+                keys.append(key)
+        for key in keys:
+            specs.append((f"template:{key}", key, self._build_style_template_prompt(request, key, cover_prompt)))
+        return specs
+
+    def _template_video_filename(self, request: GenerateRequest, template_key: str) -> str:
+        raw = "|".join(
+            [
+                request.space_type.value,
+                request.house_property.value,
+                request.decor_style.value,
+                request.video_focus.value,
+                template_key,
+                self.settings.render_resolution,
+                self.settings.render_aspect_ratio,
+                str(self.settings.render_duration),
+            ]
+        )
+        digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+        return f"style_template_{digest}_{template_key}.mp4"
 
     async def _generate_image_with_kling(self, prompt: str, output: Path) -> None:
         base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")
@@ -351,6 +388,55 @@ class RenderService:
             f"镜头 2, 3, {item.name}软装商品细节特写，展示材质纹理、尺寸比例和摆放位置，"
             f"适合{item.scene}，{item.role}，真实电商种草短视频质感，温暖自然光;"
         )
+
+    @staticmethod
+    def _template_key_for_item(item: DesignItem) -> str:
+        name = item.name
+        if any(word in name for word in ["沙发", "椅", "床", "凳"]):
+            return "seating"
+        if any(word in name for word in ["茶几", "桌", "柜", "架", "收纳"]):
+            return "table_storage"
+        if "灯" in name:
+            return "lighting"
+        if any(word in name for word in ["窗帘", "地毯", "抱枕", "床品", "毯"]):
+            return "textile"
+        return "decor"
+
+    @staticmethod
+    def _build_style_template_prompt(request: GenerateRequest, template_key: str, cover_prompt: str) -> str:
+        style = request.decor_style.value
+        space = request.space_type.value
+        base = (
+            f"{request.area_sqm:g}平方米{space}，{style}，{request.house_property.value}，"
+            f"{request.video_focus.value}，真实家装短视频，竖屏9:16，无人物，无文字，无水印，温暖自然光。"
+        )
+        templates = {
+            "overall": (
+                f"镜头 1, 2, {base}展示完整空间布局，镜头从门口缓慢推进;"
+                f"镜头 2, 3, {style}{space}整体软装氛围，沙发、茶几、灯光、窗帘统一搭配，真实可落地;"
+            ),
+            "seating": (
+                f"镜头 1, 2, {base}聚焦主要坐卧区，预留沙发或休闲椅位置，镜头平稳横移;"
+                f"镜头 2, 3, {style}布艺或科技布坐具区域，展示靠包、边几、背景墙层次，适合叠加商品信息;"
+            ),
+            "table_storage": (
+                f"镜头 1, 2, {base}聚焦茶几、边柜、置物架或收纳区，空间整洁，动线清晰;"
+                f"镜头 2, 3, {style}收纳与桌面细节，木质、金属或亚克力材质氛围，适合展示商品卖点;"
+            ),
+            "lighting": (
+                f"镜头 1, 2, {base}聚焦落地灯、台灯或氛围灯位置，室内灯光由暗到亮;"
+                f"镜头 2, 3, {style}暖色灯光照亮墙面和家具边缘，突出氛围感提升，适合灯具商品展示;"
+            ),
+            "textile": (
+                f"镜头 1, 2, {base}聚焦窗帘、地毯、抱枕等软装织物，镜头缓慢下移;"
+                f"镜头 2, 3, {style}织物纹理、地面和窗边层次，柔和自然光，适合叠加软装商品信息;"
+            ),
+            "decor": (
+                f"镜头 1, 2, {base}聚焦墙面、角落、装饰摆件区域，镜头缓慢推进;"
+                f"镜头 2, 3, {style}装饰细节和空间层次，干净真实，适合展示软装单品;"
+            ),
+        }
+        return templates.get(template_key, templates["overall"])
 
     def _draw_demo_render(self, output: Path, request: GenerateRequest, plan: DesignPlan, prompt: str) -> None:
         width, height = 1600, 1200

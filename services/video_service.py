@@ -55,7 +55,7 @@ class VideoService:
         render_path = render.render_path if render else None
         render_clips = render.render_clips if render else []
         clip_map = {clip.title: clip.video_path for clip in render_clips}
-        overall_clip = next((clip.video_path for clip in render_clips if clip.kind == "overall"), None)
+        overall_clip = clip_map.get("overall") or next((clip.video_path for clip in render_clips if clip.kind == "overall"), None)
         scenes = [
             {
                 "title": f"{request.area_sqm:g}㎡{request.decor_style.value}低成本改造",
@@ -70,6 +70,7 @@ class VideoService:
         per_item = matches[: self.settings.render_product_clip_count]
         for match in per_item:
             product = match.products[0] if match.products else None
+            template_key = self._template_key_for_item(match.design_item.name)
             scenes.append(
                 {
                     "title": match.design_item.name,
@@ -87,7 +88,8 @@ class VideoService:
                     "product_title": product.title if product and product.is_realtime else "",
                     "duration": 5,
                     "kind": "product",
-                    "clip_path": clip_map.get(match.design_item.name),
+                    "template_key": template_key,
+                    "clip_path": clip_map.get(template_key) or clip_map.get(match.design_item.name),
                 }
             )
         scenes.append(
@@ -100,6 +102,18 @@ class VideoService:
             }
         )
         return scenes
+
+    @staticmethod
+    def _template_key_for_item(item_name: str) -> str:
+        if any(word in item_name for word in ["沙发", "椅", "床", "凳"]):
+            return "seating"
+        if any(word in item_name for word in ["茶几", "桌", "柜", "架", "收纳"]):
+            return "table_storage"
+        if "灯" in item_name:
+            return "lighting"
+        if any(word in item_name for word in ["窗帘", "地毯", "抱枕", "床品", "毯"]):
+            return "textile"
+        return "decor"
 
     def _attach_product_images(self, scenes: list[dict], run_id: str) -> None:
         asset_dir = self.settings.tmp_dir / run_id

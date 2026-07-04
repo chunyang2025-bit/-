@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     render_duration: int = Field(default=5, ge=3, le=15)
     render_product_clips: bool = True
     render_product_clip_count: int = Field(default=7, ge=1, le=12)
+    render_template_mode: bool = True
+    render_reuse_templates: bool = True
     render_poll_seconds: int = Field(default=120, ge=10)
 
     video_width: int = 1080
