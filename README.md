@@ -48,6 +48,19 @@ python scripts/smoke_test.py
 
 当前装修效果图为本地生成的演示效果图，用于展示视频结构和空间氛围。接入外部图像/视频生成 API 后，可在 `RenderService` 内替换为真实 AI 生成效果图或图生视频。
 
+可灵配置示例：
+
+```env
+RENDER_PROVIDER=kling
+RENDER_API_URL=https://api.klingai.com
+RENDER_API_KEY=你的可灵AccessKey
+RENDER_API_SECRET=你的可灵SecretKey
+RENDER_MODEL=kling-v1
+RENDER_ASPECT_RATIO=16:9
+```
+
+配置后可先运行 `python scripts/render_debug.py` 单独测试效果图生成。
+
 如 TBK 报 `Invalid signature`，先运行：
 
 ```bash

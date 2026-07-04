@@ -1,6 +1,14 @@
+import base64
+import hashlib
+import hmac
+import json
+import time
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from typing import Any, Optional
 
+import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
@@ -15,6 +23,18 @@ class RenderService:
         prompt = self._build_prompt(request, plan)
         filename = f"home_design_render_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         output = self.settings.renders_dir / filename
+        if self.settings.render_provider.lower() == "kling" and self.settings.render_api_key and self.settings.render_api_secret:
+            try:
+                await self._generate_with_kling(prompt, output)
+                return RenderedAsset(
+                    render_url=f"/renders/{filename}",
+                    render_path=str(output),
+                    prompt=prompt,
+                    provider="kling",
+                    is_demo=False,
+                )
+            except Exception:
+                pass
         self._draw_demo_render(output, request, plan, prompt)
         return RenderedAsset(
             render_url=f"/renders/{filename}",
@@ -23,6 +43,111 @@ class RenderService:
             provider=self.settings.render_provider,
             is_demo=self.settings.render_provider == "demo",
         )
+
+    async def _generate_with_kling(self, prompt: str, output: Path) -> None:
+        base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")
+        headers = {
+            "Authorization": f"Bearer {self._kling_jwt()}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model_name": self.settings.render_model,
+            "prompt": prompt,
+            "negative_prompt": "low quality, blurry, distorted furniture, unreadable text, watermark, logo, people",
+            "n": 1,
+            "aspect_ratio": self.settings.render_aspect_ratio,
+        }
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(f"{base_url}/v1/images/generations", headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            task_id = self._extract_task_id(data)
+            if not task_id:
+                image_url = self._extract_image_url(data)
+                if not image_url:
+                    raise RuntimeError(f"Kling did not return task_id or image url: {data}")
+                await self._download_render(client, image_url, output)
+                return
+
+            deadline = time.time() + self.settings.render_poll_seconds
+            while time.time() < deadline:
+                await self._sleep(3)
+                poll = await client.get(f"{base_url}/v1/images/generations/{task_id}", headers=headers)
+                poll.raise_for_status()
+                poll_data = poll.json()
+                status = self._extract_status(poll_data)
+                if status in {"succeed", "success", "completed"}:
+                    image_url = self._extract_image_url(poll_data)
+                    if not image_url:
+                        raise RuntimeError(f"Kling task succeeded without image url: {poll_data}")
+                    await self._download_render(client, image_url, output)
+                    return
+                if status in {"failed", "failure"}:
+                    raise RuntimeError(f"Kling task failed: {poll_data}")
+        raise TimeoutError("Kling render timed out")
+
+    async def _download_render(self, client: httpx.AsyncClient, image_url: str, output: Path) -> None:
+        response = await client.get(image_url, timeout=60, follow_redirects=True)
+        response.raise_for_status()
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+        image.save(output, format="JPEG", quality=92)
+
+    def _kling_jwt(self) -> str:
+        now = int(time.time())
+        header = {"alg": "HS256", "typ": "JWT"}
+        payload = {
+            "iss": self.settings.render_api_key,
+            "exp": now + 1800,
+            "nbf": now - 5,
+        }
+        signing_input = ".".join([self._b64_json(header), self._b64_json(payload)])
+        signature = hmac.new(
+            (self.settings.render_api_secret or "").encode("utf-8"),
+            signing_input.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        return f"{signing_input}.{self._b64(signature)}"
+
+    @staticmethod
+    def _b64_json(payload: dict[str, Any]) -> str:
+        return RenderService._b64(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+    @staticmethod
+    def _b64(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+
+    @staticmethod
+    async def _sleep(seconds: int) -> None:
+        import asyncio
+
+        await asyncio.sleep(seconds)
+
+    @staticmethod
+    def _extract_task_id(data: dict[str, Any]) -> Optional[str]:
+        payload = data.get("data") if isinstance(data.get("data"), dict) else data
+        return payload.get("task_id") or payload.get("id") or payload.get("taskId")
+
+    @staticmethod
+    def _extract_status(data: dict[str, Any]) -> str:
+        payload = data.get("data") if isinstance(data.get("data"), dict) else data
+        return str(payload.get("task_status") or payload.get("status") or "").lower()
+
+    @staticmethod
+    def _extract_image_url(data: dict[str, Any]) -> Optional[str]:
+        payload = data.get("data") if isinstance(data.get("data"), dict) else data
+        task_result = payload.get("task_result") if isinstance(payload, dict) else None
+        if isinstance(task_result, dict):
+            images = task_result.get("images") or []
+            if images:
+                return images[0].get("url") or images[0].get("image_url")
+        images = payload.get("images") or payload.get("result") or []
+        if isinstance(images, list) and images:
+            first = images[0]
+            if isinstance(first, dict):
+                return first.get("url") or first.get("image_url")
+            if isinstance(first, str):
+                return first
+        return payload.get("url") or payload.get("image_url")
 
     @staticmethod
     def _build_prompt(request: GenerateRequest, plan: DesignPlan) -> str:

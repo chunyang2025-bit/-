@@ -43,6 +43,14 @@ python scripts/tbk_debug.py
 
 当前 `RENDER_PROVIDER=demo` 会生成本地示意效果图，用于流程演示。要升级为更真实的装修视觉，可将 `services/render_service.py` 替换为可灵、即梦、通义万相等图像/视频生成 API。
 
+可灵配置后先运行：
+
+```bash
+python scripts/render_debug.py
+```
+
+输出 `provider=kling` 且 `is_demo=False`，说明可灵效果图已接入。若仍为 `is_demo=True`，说明可灵接口失败并回退到了本地演示图。
+
 ### 使用 DeepSeek 后没有配音
 
 DeepSeek 兼容接口用于文案/方案生成，不提供当前代码使用的 `/audio/speech` 配音接口。系统会自动生成无旁白视频；如需配音，接入阿里云/腾讯云 TTS 或支持语音接口的模型服务。

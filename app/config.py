@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     render_provider: str = "demo"
     render_api_url: Optional[str] = None
     render_api_key: Optional[str] = None
+    render_api_secret: Optional[str] = None
+    render_model: str = "kling-v1"
+    render_aspect_ratio: str = "16:9"
+    render_poll_seconds: int = Field(default=120, ge=10)
 
     video_width: int = 1080
     video_height: int = 1920
@@ -63,6 +67,9 @@ class Settings(BaseSettings):
         "render_provider",
         "render_api_url",
         "render_api_key",
+        "render_api_secret",
+        "render_model",
+        "render_aspect_ratio",
         mode="before",
     )
     @classmethod
