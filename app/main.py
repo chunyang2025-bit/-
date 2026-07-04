@@ -20,6 +20,8 @@ from app.models import (
     ProductSearchRequest,
     ProductSearchResponse,
     RenderedAsset,
+    TemplateGenerateRequest,
+    TemplateLibraryResponse,
 )
 from app.rate_limit import InMemoryRateLimiter
 from services.budget_service import BudgetService
@@ -137,6 +139,26 @@ async def generate_render(payload: DesignPlan, request: Request) -> RenderedAsse
     render = await render_service.generate(render_input, payload)
     logger.write("render_generated", {"render_path": render.render_path, "provider": render.provider})
     return render
+
+
+@app.get("/api/templates", response_model=TemplateLibraryResponse, dependencies=[Depends(limited)])
+async def list_templates() -> TemplateLibraryResponse:
+    templates = render_service.list_style_templates()
+    return TemplateLibraryResponse(templates=templates)
+
+
+@app.post("/api/templates/generate", response_model=TemplateLibraryResponse, dependencies=[Depends(limited)])
+async def generate_templates(payload: TemplateGenerateRequest) -> TemplateLibraryResponse:
+    templates = await render_service.generate_style_templates(payload, payload.template_keys)
+    logger.write(
+        "templates_generated",
+        {
+            "decor_style": payload.decor_style.value,
+            "space_type": payload.space_type.value,
+            "templates": [template.key for template in templates],
+        },
+    )
+    return TemplateLibraryResponse(templates=templates)
 
 
 @app.post("/api/calc_budget", response_model=BudgetResponse, dependencies=[Depends(limited)])

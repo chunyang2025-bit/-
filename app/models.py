@@ -165,6 +165,29 @@ class RenderedAsset(BaseModel):
     render_clips: List[RenderedClip] = Field(default_factory=list)
 
 
+class TemplateGenerateRequest(GenerateRequest):
+    template_keys: List[str] = Field(default_factory=list)
+
+
+class StyleTemplate(BaseModel):
+    key: str
+    label: str
+    decor_style: str
+    space_type: str
+    house_property: str
+    video_focus: str
+    video_url: str
+    video_path: str
+    cached: bool = True
+    task_id: Optional[str] = None
+    duration_seconds: float = 5
+    updated_at: Optional[str] = None
+
+
+class TemplateLibraryResponse(BaseModel):
+    templates: List[StyleTemplate]
+
+
 class ExportExcelRequest(BaseModel):
     design_plan: DesignPlan
     product_matches: List[ProductMatch]

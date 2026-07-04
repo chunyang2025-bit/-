@@ -12,10 +12,19 @@ import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
-from app.models import DesignItem, DesignPlan, GenerateRequest, RenderedAsset, RenderedClip
+from app.models import DesignItem, DesignPlan, GenerateRequest, RenderedAsset, RenderedClip, StyleTemplate
 
 
 class RenderService:
+    TEMPLATE_LABELS = {
+        "overall": "整体空间",
+        "seating": "坐卧区",
+        "table_storage": "茶几收纳区",
+        "lighting": "灯光区",
+        "textile": "织物软装区",
+        "decor": "装饰区",
+    }
+
     def __init__(self, settings: Settings):
         self.settings = settings
 
@@ -106,6 +115,14 @@ class RenderService:
             task_id = "cached-template" if video_output.exists() and video_output.stat().st_size > 0 else None
             if not task_id:
                 task_id = await self._generate_video_with_kling(clip_prompt, video_output)
+            if kind.startswith("template:"):
+                self._upsert_template_manifest(
+                    request=request,
+                    template_key=title,
+                    video_path=video_output,
+                    task_id=task_id,
+                    cached=task_id == "cached-template",
+                )
             clips.append(
                 RenderedClip(
                     title=title,
@@ -117,6 +134,61 @@ class RenderService:
                 )
             )
         return clips
+
+    async def generate_style_templates(self, request: GenerateRequest, template_keys: list[str]) -> list[StyleTemplate]:
+        keys = template_keys or list(self.TEMPLATE_LABELS.keys())
+        templates: list[StyleTemplate] = []
+        cover_prompt = self._build_prompt(
+            request,
+            DesignPlan(
+                title=f"{request.decor_style.value}{request.space_type.value}模板",
+                concept_summary="模板库预生成空间素材",
+                style_description=request.decor_style.value,
+                target_users=request.house_property.value,
+                items=[
+                    DesignItem(
+                        name="模板占位",
+                        material="软装",
+                        size="标准",
+                        scene=request.space_type.value,
+                        taobao_keyword="模板",
+                        suggested_price_min=0,
+                        suggested_price_max=0,
+                        role="模板生成",
+                    )
+                    for _ in range(3)
+                ],
+            ),
+        )
+        for key in keys:
+            if key not in self.TEMPLATE_LABELS:
+                continue
+            video_filename = self._template_video_filename(request, key)
+            video_output = self.settings.renders_dir / video_filename
+            cached = video_output.exists() and video_output.stat().st_size > 0
+            task_id = "cached-template" if cached else await self._generate_video_with_kling(
+                self._build_style_template_prompt(request, key, cover_prompt),
+                video_output,
+            )
+            template = self._upsert_template_manifest(
+                request=request,
+                template_key=key,
+                video_path=video_output,
+                task_id=task_id,
+                cached=cached,
+            )
+            templates.append(template)
+        return templates
+
+    def list_style_templates(self) -> list[StyleTemplate]:
+        manifest = self._read_template_manifest()
+        templates: list[StyleTemplate] = []
+        for entry in manifest.values():
+            path = Path(entry.get("video_path", ""))
+            if path.exists():
+                templates.append(StyleTemplate(**entry))
+        templates.sort(key=lambda item: (item.decor_style, item.space_type, item.key))
+        return templates
 
     def _build_template_clip_specs(self, request: GenerateRequest, plan: DesignPlan, cover_prompt: str) -> list[tuple[str, str, str]]:
         specs: list[tuple[str, str, str]] = [
@@ -146,6 +218,51 @@ class RenderService:
         )
         digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
         return f"style_template_{digest}_{template_key}.mp4"
+
+    def _upsert_template_manifest(
+        self,
+        request: GenerateRequest,
+        template_key: str,
+        video_path: Path,
+        task_id: str,
+        cached: bool,
+    ) -> StyleTemplate:
+        manifest = self._read_template_manifest()
+        video_url = self.settings.public_url(f"/renders/{video_path.name}")
+        template = StyleTemplate(
+            key=template_key,
+            label=self.TEMPLATE_LABELS.get(template_key, template_key),
+            decor_style=request.decor_style.value,
+            space_type=request.space_type.value,
+            house_property=request.house_property.value,
+            video_focus=request.video_focus.value,
+            video_url=video_url,
+            video_path=str(video_path),
+            cached=cached,
+            task_id=task_id,
+            duration_seconds=float(self.settings.render_duration),
+            updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        manifest[str(video_path)] = template.model_dump()
+        self._write_template_manifest(manifest)
+        return template
+
+    def _template_manifest_path(self) -> Path:
+        return self.settings.renders_dir / "style_templates.json"
+
+    def _read_template_manifest(self) -> dict[str, Any]:
+        path = self._template_manifest_path()
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _write_template_manifest(self, manifest: dict[str, Any]) -> None:
+        path = self._template_manifest_path()
+        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     async def _generate_image_with_kling(self, prompt: str, output: Path) -> None:
         base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")

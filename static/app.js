@@ -6,6 +6,9 @@ const excelLink = document.querySelector("#excelLink");
 const videoPreview = document.querySelector("#videoPreview");
 const renderPreview = document.querySelector("#renderPreview");
 const renderVideoPreview = document.querySelector("#renderVideoPreview");
+const templateList = document.querySelector("#templateList");
+const refreshTemplatesBtn = document.querySelector("#refreshTemplates");
+const generateTemplatesBtn = document.querySelector("#generateTemplates");
 
 function yuan(value) {
   return `¥${Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
@@ -114,6 +117,64 @@ function render(data) {
   lucide.createIcons();
 }
 
+function templatePayload() {
+  return {
+    ...formPayload(),
+    template_keys: ["overall", "seating", "table_storage", "lighting", "textile", "decor"],
+  };
+}
+
+function renderTemplates(data) {
+  const templates = data.templates || [];
+  if (!templates.length) {
+    templateList.innerHTML = `<p class="muted compact">暂无模板，先生成当前风格模板。</p>`;
+    return;
+  }
+  templateList.innerHTML = templates
+    .map(
+      (item) => `
+        <div class="template-card">
+          <video src="${item.video_url}" controls playsinline preload="metadata"></video>
+          <div>
+            <strong>${item.decor_style}｜${item.label}</strong>
+            <p>${item.space_type}｜${item.video_focus}</p>
+            <p>${item.cached ? "已缓存" : "新生成"}｜${item.updated_at || ""}</p>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+  lucide.createIcons();
+}
+
+async function loadTemplates() {
+  try {
+    const data = await api("/api/templates");
+    renderTemplates(data);
+  } catch (error) {
+    templateList.innerHTML = `<p class="muted compact">模板库读取失败：${error.message}</p>`;
+  }
+}
+
+refreshTemplatesBtn.addEventListener("click", loadTemplates);
+
+generateTemplatesBtn.addEventListener("click", async () => {
+  generateTemplatesBtn.disabled = true;
+  setNotice("正在生成当前风格模板；已缓存模板会直接复用...");
+  try {
+    const data = await api("/api/templates/generate", {
+      method: "POST",
+      body: JSON.stringify(templatePayload()),
+    });
+    renderTemplates(data);
+    setNotice("模板库已更新。现在可以用当前风格叠加不同商品成片。");
+  } catch (error) {
+    setNotice(`模板生成失败：${error.message}`, "error");
+  } finally {
+    generateTemplatesBtn.disabled = false;
+  }
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = form.querySelector("button");
@@ -141,3 +202,5 @@ api("/api/health")
     apiStatus.textContent = "离线";
   })
   .finally(() => lucide.createIcons());
+
+loadTemplates();

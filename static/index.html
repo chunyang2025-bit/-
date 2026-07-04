@@ -81,6 +81,25 @@
               <span>一键生成 AI 家装方案 + 视频</span>
             </button>
           </form>
+
+          <section class="template-box">
+            <div class="section-title">
+              <i data-lucide="layout-template"></i>
+              <h3>风格模板库</h3>
+            </div>
+            <div class="template-actions">
+              <button class="ghost-btn" id="refreshTemplates" type="button">
+                <i data-lucide="refresh-cw"></i>
+                <span>刷新</span>
+              </button>
+              <button class="primary-btn" id="generateTemplates" type="button">
+                <i data-lucide="wand-sparkles"></i>
+                <span>生成当前风格模板</span>
+              </button>
+            </div>
+            <p class="muted compact">先生成模板，再用同一风格叠不同商品。</p>
+            <div id="templateList" class="template-list"></div>
+          </section>
         </aside>
 
         <section class="results">
