@@ -149,6 +149,13 @@ class VideoService:
         work_dir = self.settings.tmp_dir / output.stem
         work_dir.mkdir(parents=True, exist_ok=True)
         try:
+            if render_clip and render_clip.exists():
+                try:
+                    self._render_with_visual_background(output, scenes, audio_path, render_clip, work_dir)
+                    return
+                except Exception:
+                    pass
+
             concat_file = work_dir / "concat.txt"
             frame_paths = []
             for index, scene in enumerate(scenes):
@@ -213,6 +220,87 @@ class VideoService:
                 shutil.copyfile(silent_output, output)
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    def _render_with_visual_background(
+        self,
+        output: Path,
+        scenes: list[dict],
+        audio_path: Optional[Path],
+        render_clip: Path,
+        work_dir: Path,
+    ) -> None:
+        overlay_concat = work_dir / "overlay_concat.txt"
+        overlay_paths = []
+        for index, scene in enumerate(scenes):
+            frame_path = work_dir / f"overlay_{index:02d}.png"
+            self._draw_overlay_scene(scene, index).save(frame_path)
+            overlay_paths.append(frame_path)
+
+        lines = []
+        for frame_path, scene in zip(overlay_paths, scenes):
+            lines.append(f"file '{frame_path}'")
+            lines.append(f"duration {scene['duration']}")
+        lines.append(f"file '{overlay_paths[-1]}'")
+        overlay_concat.write_text("\n".join(lines), encoding="utf-8")
+
+        total_duration = round(sum(scene["duration"] for scene in scenes), 2)
+        visual_silent = work_dir / "visual_silent.mp4"
+        width, height = self.settings.video_width, self.settings.video_height
+        filter_complex = (
+            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},setsar=1,fps=24,trim=duration={total_duration},setpts=PTS-STARTPTS[bg];"
+            "[1:v]fps=24,format=rgba,setpts=PTS-STARTPTS[ov];"
+            "[bg][ov]overlay=0:0:format=auto[v]"
+        )
+        self._run_ffmpeg(
+            [
+                "ffmpeg",
+                "-y",
+                "-stream_loop",
+                "-1",
+                "-i",
+                str(render_clip),
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(overlay_concat),
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[v]",
+                "-t",
+                str(total_duration),
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                str(visual_silent),
+            ],
+            output.with_suffix(".ffmpeg.log"),
+        )
+
+        if audio_path and audio_path.exists():
+            self._run_ffmpeg(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(visual_silent),
+                    "-i",
+                    str(audio_path),
+                    "-shortest",
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    str(output),
+                ],
+                output.with_suffix(".ffmpeg.log"),
+            )
+        else:
+            shutil.copyfile(visual_silent, output)
 
     def _prepend_video_clip(self, render_clip: Path, slideshow: Path, output: Path, log_path: Path) -> None:
         width, height = self.settings.video_width, self.settings.video_height
@@ -293,6 +381,64 @@ class VideoService:
         draw.text((92, height - 170), "商品来源・淘宝｜AI 自动生成｜价格以官网为准", font=small_font, fill=ink)
         draw.text((92, height - 115), "AI 设计方案仅供参考", font=small_font, fill=ink)
         return image
+
+    def _draw_overlay_scene(self, scene: dict, index: int) -> Image.Image:
+        width, height = self.settings.video_width, self.settings.video_height
+        image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        title_font = self._font(72)
+        body_font = self._font(38)
+        price_font = self._font(58)
+        small_font = self._font(28)
+        accent = ["#D9633D", "#2F7A68", "#8060A8"][index % 3]
+
+        draw.rectangle([0, 0, width, 360], fill=(0, 0, 0, 96))
+        draw.rectangle([0, height - 420, width, height], fill=(0, 0, 0, 132))
+        draw.rounded_rectangle([64, 94, width - 64, 330], radius=24, fill=(255, 255, 255, 224))
+        self._multiline(draw, scene["title"], 104, 132, title_font, "#17211C", 11, 84)
+
+        if scene.get("kind") == "product":
+            self._draw_product_overlay(image, draw, scene, body_font, price_font, small_font, accent)
+        else:
+            draw.rounded_rectangle([72, height - 360, width - 72, height - 185], radius=22, fill=(255, 255, 255, 214))
+            self._multiline(draw, scene["body"], 110, height - 326, body_font, "#17211C", 20, 54)
+            draw.rounded_rectangle([92, height - 160, width - 92, height - 82], radius=16, fill=accent)
+            self._multiline(draw, scene["price"], 128, height - 145, small_font, "#FFFFFF", 28, 38)
+
+        draw.text((76, height - 52), "商品来源・淘宝｜AI 自动生成｜价格以官网为准｜AI 设计方案仅供参考", font=small_font, fill="#FFFFFF")
+        return image
+
+    def _draw_product_overlay(
+        self,
+        image: Image.Image,
+        draw: ImageDraw.ImageDraw,
+        scene: dict,
+        body_font: ImageFont.FreeTypeFont,
+        price_font: ImageFont.FreeTypeFont,
+        small_font: ImageFont.FreeTypeFont,
+        accent: str,
+    ) -> None:
+        width, height = self.settings.video_width, self.settings.video_height
+        image_path = scene.get("image_path")
+        if image_path:
+            product_image = Image.open(image_path).convert("RGBA")
+            product_image = self._fit_cover(product_image.convert("RGB"), (430, 430)).convert("RGBA")
+            frame = Image.new("RGBA", (470, 470), (255, 255, 255, 226))
+            frame.paste(product_image, (20, 20))
+            image.alpha_composite(frame, (72, 420))
+        else:
+            draw.rounded_rectangle([72, 420, 590, 560], radius=22, fill=(255, 255, 255, 214))
+            draw.text((106, 454), "商品图待 TBK 权限通过后自动替换", font=small_font, fill="#17211C")
+
+        draw.rounded_rectangle([72, height - 480, width - 72, height - 190], radius=24, fill=(255, 255, 255, 226))
+        self._multiline(draw, scene["body"], 112, height - 444, body_font, "#17211C", 20, 54)
+        product_title = scene.get("product_title") or ""
+        self._multiline(draw, product_title, 112, height - 315, small_font, "#4D4B45", 30, 38)
+
+        draw.rounded_rectangle([72, height - 170, width - 72, height - 80], radius=18, fill=accent)
+        self._multiline(draw, scene["price"], 112, height - 157, price_font, "#FFFFFF", 13, 66)
+        meta = f"{scene.get('shop', '')}｜销量 {scene.get('sales', 0)}｜{scene.get('source', '')}"
+        self._multiline(draw, meta, 112, height - 238, small_font, "#17211C", 28, 38)
 
     def _draw_product_scene(
         self,
