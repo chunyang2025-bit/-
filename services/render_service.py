@@ -12,7 +12,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
-from app.models import DesignPlan, GenerateRequest, RenderedAsset
+from app.models import DesignItem, DesignPlan, GenerateRequest, RenderedAsset, RenderedClip
 
 
 class RenderService:
@@ -28,9 +28,8 @@ class RenderService:
             try:
                 if self._wants_video_render():
                     self._draw_demo_render(output, request, plan, f"{prompt}｜Kling text-to-video preview")
-                    video_filename = filename.replace(".jpg", ".mp4")
-                    video_output = self.settings.renders_dir / video_filename
-                    task_id = await self._generate_video_with_kling(prompt, video_output)
+                    clips = await self._generate_kling_clip_set(request, plan, filename, prompt)
+                    first_clip = clips[0] if clips else None
                     return RenderedAsset(
                         render_url=self.settings.public_url(f"/renders/{filename}"),
                         render_path=str(output),
@@ -38,10 +37,11 @@ class RenderService:
                         provider="kling-video",
                         is_demo=False,
                         render_type="video",
-                        render_video_url=self.settings.public_url(f"/renders/{video_filename}"),
-                        render_video_path=str(video_output),
-                        render_task_id=task_id,
+                        render_video_url=first_clip.video_url if first_clip else None,
+                        render_video_path=first_clip.video_path if first_clip else None,
+                        render_task_id=first_clip.task_id if first_clip else None,
                         render_video_duration_seconds=float(self.settings.render_duration),
+                        render_clips=clips,
                     )
                 await self._generate_image_with_kling(prompt, output)
                 return RenderedAsset(
@@ -73,6 +73,42 @@ class RenderService:
         render_kind = (self.settings.render_kind or "").lower()
         endpoint = (self.settings.render_endpoint or "").lower()
         return render_kind in {"video", "text-to-video", "kling-video"} or "text-to-video" in endpoint
+
+    async def _generate_kling_clip_set(
+        self,
+        request: GenerateRequest,
+        plan: DesignPlan,
+        image_filename: str,
+        cover_prompt: str,
+    ) -> list[RenderedClip]:
+        base_name = image_filename.replace(".jpg", "")
+        clip_specs: list[tuple[str, str, str]] = [
+            (
+                "overall",
+                "整体方案",
+                self._build_video_prompt(cover_prompt, self.settings.render_duration),
+            )
+        ]
+        if self.settings.render_product_clips:
+            for item in plan.items[: self.settings.render_product_clip_count]:
+                clip_specs.append(("product", item.name, self._build_item_video_prompt(request, item)))
+
+        clips: list[RenderedClip] = []
+        for index, (kind, title, clip_prompt) in enumerate(clip_specs):
+            video_filename = f"{base_name}_{index:02d}_{kind}.mp4"
+            video_output = self.settings.renders_dir / video_filename
+            task_id = await self._generate_video_with_kling(clip_prompt, video_output)
+            clips.append(
+                RenderedClip(
+                    title=title,
+                    kind=kind,
+                    video_url=self.settings.public_url(f"/renders/{video_filename}"),
+                    video_path=str(video_output),
+                    task_id=task_id,
+                    duration_seconds=float(self.settings.render_duration),
+                )
+            )
+        return clips
 
     async def _generate_image_with_kling(self, prompt: str, output: Path) -> None:
         base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")
@@ -122,7 +158,7 @@ class RenderService:
         headers = self._auth_headers()
         external_task_id = f"ai_home_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         payload = {
-            "prompt": self._build_video_prompt(prompt, self.settings.render_duration),
+            "prompt": prompt,
             "options": {
                 "watermark_info": {"enabled": False},
                 "external_task_id": external_task_id,
@@ -307,6 +343,15 @@ class RenderService:
         second = "家具软装商品细节展示，沙发、茶几、灯具、窗帘、地毯依次出现，真实材质，电商种草质感，温暖自然光"
         return f"镜头 1, {first_duration}, {first}; 镜头 2, {second_duration}, {second};"
 
+    @staticmethod
+    def _build_item_video_prompt(request: GenerateRequest, item: DesignItem) -> str:
+        return (
+            f"镜头 1, 2, {request.decor_style.value}{request.space_type.value}真实家装场景，镜头缓慢靠近{item.name}，"
+            f"{item.material}材质，{item.size}规格，无人物，无文字，无水印;"
+            f"镜头 2, 3, {item.name}软装商品细节特写，展示材质纹理、尺寸比例和摆放位置，"
+            f"适合{item.scene}，{item.role}，真实电商种草短视频质感，温暖自然光;"
+        )
+
     def _draw_demo_render(self, output: Path, request: GenerateRequest, plan: DesignPlan, prompt: str) -> None:
         width, height = 1600, 1200
         palettes = {
@@ -365,6 +410,10 @@ class RenderService:
             "/System/Library/Fonts/PingFang.ttc",
             "/System/Library/Fonts/STHeiti Light.ttc",
             "/Library/Fonts/Arial Unicode.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/arphic/ukai.ttc",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         ]
         for path in candidates:

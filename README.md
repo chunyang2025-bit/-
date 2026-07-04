@@ -68,6 +68,8 @@ RENDER_POLL_SECONDS=180
 
 配置后可先运行 `python scripts/render_debug.py` 单独测试。输出 `provider=kling-video`、`render_type=video`、`render_video=...mp4`，说明已走通可灵视频接口。
 
+默认会生成 1 条整体方案视频，并为前 7 个软装单品分别生成 5 秒可灵视频，再按“单品视频 + 对应字幕/价格/来源浮层”合成为完整成片。可通过 `RENDER_PRODUCT_CLIP_COUNT` 控制单次生成的单品视频数量。
+
 如果后续使用图生视频或把装修图传给国内平台，必须确保图片 URL 可公网访问。请将 `APP_BASE_URL` 配成公网域名或公网 IP，例如：
 
 ```env

@@ -142,6 +142,15 @@ class GeneratedVideo(BaseModel):
     compliance_caption: str
 
 
+class RenderedClip(BaseModel):
+    title: str
+    kind: str
+    video_url: str
+    video_path: str
+    task_id: Optional[str] = None
+    duration_seconds: float = 5
+
+
 class RenderedAsset(BaseModel):
     render_url: str
     render_path: str
@@ -153,6 +162,7 @@ class RenderedAsset(BaseModel):
     render_video_path: Optional[str] = None
     render_task_id: Optional[str] = None
     render_video_duration_seconds: Optional[float] = None
+    render_clips: List[RenderedClip] = Field(default_factory=list)
 
 
 class ExportExcelRequest(BaseModel):

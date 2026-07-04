@@ -33,6 +33,9 @@ async def main() -> int:
     if render.render_video_path:
         print(f"render_video={render.render_video_path}")
         print(f"render_task_id={render.render_task_id}")
+    print(f"render_clips={len(render.render_clips)}")
+    for clip in render.render_clips:
+        print(f"clip={clip.kind}:{clip.title}:{clip.video_path}")
     print(f"prompt={render.prompt}")
     return 0
 

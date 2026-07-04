@@ -37,11 +37,10 @@ class VideoService:
         self._render_movie(output, scenes, audio_path, render_clip)
         if not output.exists() or output.stat().st_size == 0:
             raise RuntimeError(f"视频生成失败，未生成有效 MP4：{output}")
-        render_clip_duration = render.render_video_duration_seconds if render_clip and render_clip.exists() else 0
         return GeneratedVideo(
             video_url=self.settings.public_url(f"/videos/{filename}"),
             video_path=str(output),
-            duration_seconds=round(sum(scene["duration"] for scene in scenes) + (render_clip_duration or 0), 2),
+            duration_seconds=round(sum(scene["duration"] for scene in scenes), 2),
             compliance_caption="AI 设计方案仅供参考｜商品来源：淘宝官方在售商品｜价格为实时券后价，以官网为准｜本内容由 AI 自动生成",
         )
 
@@ -54,32 +53,27 @@ class VideoService:
         render: Optional[RenderedAsset] = None,
     ) -> list[dict]:
         render_path = render.render_path if render else None
+        render_clips = render.render_clips if render else []
+        clip_map = {clip.title: clip.video_path for clip in render_clips}
+        overall_clip = next((clip.video_path for clip in render_clips if clip.kind == "overall"), None)
         scenes = [
             {
                 "title": f"{request.area_sqm:g}㎡{request.decor_style.value}低成本改造",
-                "body": "软装清单｜逐件商品视觉展示｜一键生成视频与采购表",
-                "price": "AI 效果图 + 商品图混剪",
-                "duration": 4,
+                "body": plan.concept_summary,
+                "price": "AI 家装动态方案 + 单品视频清单",
+                "duration": 5,
                 "kind": "cover",
                 "render_path": render_path,
-            },
-            {
-                "title": "整体方案",
-                "body": plan.concept_summary,
-                "price": "装修效果图示意",
-                "duration": 8,
-                "kind": "plan",
-                "render_path": render_path,
+                "clip_path": overall_clip,
             },
         ]
-        per_item = matches[:7]
-        item_duration = 30 / max(len(per_item), 1)
+        per_item = matches[: self.settings.render_product_clip_count]
         for match in per_item:
             product = match.products[0] if match.products else None
             scenes.append(
                 {
                     "title": match.design_item.name,
-                    "body": f"{match.design_item.material}｜{match.design_item.size}｜{match.design_item.role}",
+                    "body": f"{match.design_item.material}｜{match.design_item.size}｜{match.design_item.scene}｜{match.design_item.role}",
                     "price": f"券后约 {product.final_price:.0f} 元" if product else "待匹配",
                     "shop": product.shop_name if product else "待匹配",
                     "sales": product.sales if product else 0,
@@ -87,8 +81,9 @@ class VideoService:
                     "is_realtime": bool(product and product.is_realtime),
                     "image_url": product.image_url if product else None,
                     "product_title": product.title if product else "未匹配到商品",
-                    "duration": item_duration,
+                    "duration": 5,
                     "kind": "product",
+                    "clip_path": clip_map.get(match.design_item.name),
                 }
             )
         scenes.append(
@@ -96,7 +91,7 @@ class VideoService:
                 "title": "预算汇总",
                 "body": f"低配 {budget.low_plan.total_price:.0f} 元｜高配 {budget.high_plan.total_price:.0f} 元",
                 "price": "价格以淘宝实时页面为准",
-                "duration": 8,
+                "duration": 5,
                 "kind": "budget",
             }
         )
@@ -149,6 +144,10 @@ class VideoService:
         work_dir = self.settings.tmp_dir / output.stem
         work_dir.mkdir(parents=True, exist_ok=True)
         try:
+            if any(scene.get("clip_path") and Path(scene["clip_path"]).exists() for scene in scenes):
+                self._render_scene_clip_sequence(output, scenes, audio_path, work_dir)
+                return
+
             if render_clip and render_clip.exists():
                 try:
                     self._render_with_visual_background(output, scenes, audio_path, render_clip, work_dir)
@@ -220,6 +219,118 @@ class VideoService:
                 shutil.copyfile(silent_output, output)
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    def _render_scene_clip_sequence(
+        self,
+        output: Path,
+        scenes: list[dict],
+        audio_path: Optional[Path],
+        work_dir: Path,
+    ) -> None:
+        segment_paths: list[Path] = []
+        width, height = self.settings.video_width, self.settings.video_height
+        for index, scene in enumerate(scenes):
+            duration = str(scene["duration"])
+            segment_path = work_dir / f"segment_{index:02d}.mp4"
+            clip_path = Path(scene["clip_path"]) if scene.get("clip_path") else None
+            if clip_path and clip_path.exists():
+                overlay_path = work_dir / f"overlay_{index:02d}.png"
+                self._draw_overlay_scene(scene, index).save(overlay_path)
+                filter_complex = (
+                    f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                    f"crop={width}:{height},setsar=1,fps=24,trim=duration={duration},setpts=PTS-STARTPTS[bg];"
+                    "[1:v]format=rgba,setpts=PTS-STARTPTS[ov];"
+                    "[bg][ov]overlay=0:0:format=auto[v]"
+                )
+                self._run_ffmpeg(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-stream_loop",
+                        "-1",
+                        "-i",
+                        str(clip_path),
+                        "-i",
+                        str(overlay_path),
+                        "-filter_complex",
+                        filter_complex,
+                        "-map",
+                        "[v]",
+                        "-t",
+                        duration,
+                        "-c:v",
+                        "libx264",
+                        "-pix_fmt",
+                        "yuv420p",
+                        str(segment_path),
+                    ],
+                    output.with_suffix(".ffmpeg.log"),
+                )
+            else:
+                frame_path = work_dir / f"scene_{index:02d}.png"
+                self._draw_scene(scene, index).save(frame_path)
+                self._run_ffmpeg(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-loop",
+                        "1",
+                        "-t",
+                        duration,
+                        "-i",
+                        str(frame_path),
+                        "-c:v",
+                        "libx264",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-r",
+                        "24",
+                        str(segment_path),
+                    ],
+                    output.with_suffix(".ffmpeg.log"),
+                )
+            segment_paths.append(segment_path)
+
+        concat_file = work_dir / "segments.txt"
+        concat_file.write_text("\n".join(f"file '{path}'" for path in segment_paths), encoding="utf-8")
+        silent_output = work_dir / "scene_sequence_silent.mp4"
+        self._run_ffmpeg(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_file),
+                "-c",
+                "copy",
+                str(silent_output),
+            ],
+            output.with_suffix(".ffmpeg.log"),
+        )
+
+        if audio_path and audio_path.exists():
+            self._run_ffmpeg(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(silent_output),
+                    "-i",
+                    str(audio_path),
+                    "-shortest",
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    str(output),
+                ],
+                output.with_suffix(".ffmpeg.log"),
+            )
+        else:
+            shutil.copyfile(silent_output, output)
 
     def _render_with_visual_background(
         self,
@@ -549,6 +660,10 @@ class VideoService:
             "/System/Library/Fonts/PingFang.ttc",
             "/System/Library/Fonts/STHeiti Light.ttc",
             "/Library/Fonts/Arial Unicode.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/arphic/ukai.ttc",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         ]
         for path in candidates:
