@@ -23,9 +23,27 @@ class RenderService:
         prompt = self._build_prompt(request, plan)
         filename = f"home_design_render_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         output = self.settings.renders_dir / filename
-        if self.settings.render_provider.lower() == "kling" and self.settings.render_api_key:
+        render_provider = (self.settings.render_provider or "demo").lower()
+        if render_provider == "kling" and self.settings.render_api_key:
             try:
-                await self._generate_with_kling(prompt, output)
+                if self._wants_video_render():
+                    self._draw_demo_render(output, request, plan, f"{prompt}｜Kling text-to-video preview")
+                    video_filename = filename.replace(".jpg", ".mp4")
+                    video_output = self.settings.renders_dir / video_filename
+                    task_id = await self._generate_video_with_kling(prompt, video_output)
+                    return RenderedAsset(
+                        render_url=self.settings.public_url(f"/renders/{filename}"),
+                        render_path=str(output),
+                        prompt=prompt,
+                        provider="kling-video",
+                        is_demo=False,
+                        render_type="video",
+                        render_video_url=self.settings.public_url(f"/renders/{video_filename}"),
+                        render_video_path=str(video_output),
+                        render_task_id=task_id,
+                        render_video_duration_seconds=float(self.settings.render_duration),
+                    )
+                await self._generate_image_with_kling(prompt, output)
                 return RenderedAsset(
                     render_url=self.settings.public_url(f"/renders/{filename}"),
                     render_path=str(output),
@@ -47,19 +65,19 @@ class RenderService:
             render_url=self.settings.public_url(f"/renders/{filename}"),
             render_path=str(output),
             prompt=prompt,
-            provider=self.settings.render_provider,
-            is_demo=self.settings.render_provider == "demo",
+            provider=render_provider,
+            is_demo=render_provider == "demo",
         )
 
-    async def _generate_with_kling(self, prompt: str, output: Path) -> None:
+    def _wants_video_render(self) -> bool:
+        render_kind = (self.settings.render_kind or "").lower()
+        endpoint = (self.settings.render_endpoint or "").lower()
+        return render_kind in {"video", "text-to-video", "kling-video"} or "text-to-video" in endpoint
+
+    async def _generate_image_with_kling(self, prompt: str, output: Path) -> None:
         base_url = (self.settings.render_api_url or "https://api.klingai.com").rstrip("/")
         endpoint = "/" + (self.settings.render_endpoint or "/v1/images/generations").lstrip("/")
-        headers = {
-            "Content-Type": "application/json",
-        }
-        token = self._kling_token()
-        auth_prefix = (self.settings.render_auth_prefix or "").strip()
-        headers[self.settings.render_auth_header or "Authorization"] = f"{auth_prefix} {token}".strip()
+        headers = self._auth_headers()
         payload = {
             "model_name": self.settings.render_model,
             "prompt": prompt,
@@ -71,6 +89,7 @@ class RenderService:
             response = await client.post(f"{base_url}{endpoint}", headers=headers, json=payload)
             self._raise_render_error(response)
             data = response.json()
+            self._raise_kling_api_error(data)
             task_id = self._extract_task_id(data)
             if not task_id:
                 image_url = self._extract_image_url(data)
@@ -96,6 +115,54 @@ class RenderService:
                     raise RuntimeError(f"Kling task failed: {poll_data}")
         raise TimeoutError("Kling render timed out")
 
+    async def _generate_video_with_kling(self, prompt: str, output: Path) -> str:
+        base_url = (self.settings.render_api_url or "https://api-beijing.klingai.com").rstrip("/")
+        endpoint = "/" + (self.settings.render_video_endpoint or "/text-to-video/kling-3.0-turbo").lstrip("/")
+        task_endpoint = "/" + (self.settings.render_task_endpoint or "/tasks").lstrip("/")
+        headers = self._auth_headers()
+        external_task_id = f"ai_home_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        payload = {
+            "prompt": self._build_video_prompt(prompt, self.settings.render_duration),
+            "options": {
+                "watermark_info": {"enabled": False},
+                "external_task_id": external_task_id,
+            },
+            "settings": {
+                "duration": self.settings.render_duration,
+                "resolution": self.settings.render_resolution,
+                "aspect_ratio": self.settings.render_aspect_ratio,
+            },
+        }
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            response = await client.post(f"{base_url}{endpoint}", headers=headers, json=payload)
+            self._raise_render_error(response)
+            data = response.json()
+            self._raise_kling_api_error(data)
+            task_id = self._extract_task_id(data)
+            if not task_id:
+                raise RuntimeError(f"Kling text-to-video did not return task id: {data}")
+
+            deadline = time.time() + self.settings.render_poll_seconds
+            last_status = "submitted"
+            while time.time() < deadline:
+                await self._sleep(5)
+                poll = await client.get(f"{base_url}{task_endpoint}", headers=headers, params={"task_ids": task_id})
+                self._raise_render_error(poll)
+                poll_data = poll.json()
+                self._raise_kling_api_error(poll_data)
+                task = self._extract_first_task(poll_data)
+                last_status = self._extract_status(task)
+                if last_status == "succeeded":
+                    video_url = self._extract_video_url(task)
+                    if not video_url:
+                        raise RuntimeError(f"Kling task succeeded without video url: {poll_data}")
+                    await self._download_video(client, video_url, output)
+                    return task_id
+                if last_status == "failed":
+                    message = task.get("message") if isinstance(task, dict) else ""
+                    raise RuntimeError(f"Kling text-to-video task failed: {message or poll_data}")
+            raise TimeoutError(f"Kling text-to-video timed out, last_status={last_status}, task_id={task_id}")
+
     @staticmethod
     def _raise_render_error(response: httpx.Response) -> None:
         try:
@@ -104,11 +171,35 @@ class RenderService:
             body = response.text[:1200]
             raise RuntimeError(f"{response.status_code} {response.reason_phrase}: {body}") from exc
 
+    @staticmethod
+    def _raise_kling_api_error(data: dict[str, Any]) -> None:
+        code = data.get("code")
+        if code in (None, 0, "0"):
+            return
+        message = data.get("message") or data.get("msg") or data
+        raise RuntimeError(f"Kling API error {code}: {message}")
+
+    def _auth_headers(self) -> dict[str, str]:
+        token = self._kling_token()
+        auth_prefix = (self.settings.render_auth_prefix or "").strip()
+        return {
+            "Content-Type": "application/json",
+            self.settings.render_auth_header or "Authorization": f"{auth_prefix} {token}".strip(),
+        }
+
     async def _download_render(self, client: httpx.AsyncClient, image_url: str, output: Path) -> None:
         response = await client.get(image_url, timeout=60, follow_redirects=True)
         response.raise_for_status()
         image = Image.open(BytesIO(response.content)).convert("RGB")
         image.save(output, format="JPEG", quality=92)
+
+    @staticmethod
+    async def _download_video(client: httpx.AsyncClient, video_url: str, output: Path) -> None:
+        response = await client.get(video_url, timeout=180, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        output.write_bytes(response.content)
+        if output.stat().st_size == 0:
+            raise RuntimeError("Downloaded Kling video is empty")
 
     def _kling_jwt(self) -> str:
         now = int(time.time())
@@ -156,6 +247,18 @@ class RenderService:
         return str(payload.get("task_status") or payload.get("status") or "").lower()
 
     @staticmethod
+    def _extract_first_task(data: dict[str, Any]) -> dict[str, Any]:
+        payload = data.get("data")
+        if isinstance(payload, list) and payload:
+            return payload[0] if isinstance(payload[0], dict) else {}
+        if isinstance(payload, dict):
+            result = payload.get("result")
+            if isinstance(result, list) and result:
+                return result[0] if isinstance(result[0], dict) else {}
+            return payload
+        return data
+
+    @staticmethod
     def _extract_image_url(data: dict[str, Any]) -> Optional[str]:
         payload = data.get("data") if isinstance(data.get("data"), dict) else data
         task_result = payload.get("task_result") if isinstance(payload, dict) else None
@@ -173,6 +276,21 @@ class RenderService:
         return payload.get("url") or payload.get("image_url")
 
     @staticmethod
+    def _extract_video_url(data: dict[str, Any]) -> Optional[str]:
+        payload = data.get("data") if isinstance(data.get("data"), dict) else data
+        outputs = payload.get("outputs") or []
+        if isinstance(outputs, list):
+            for item in outputs:
+                if isinstance(item, dict) and item.get("type") == "video":
+                    return item.get("url") or item.get("watermark_url")
+        task_result = payload.get("task_result") if isinstance(payload, dict) else None
+        if isinstance(task_result, dict):
+            videos = task_result.get("videos") or []
+            if videos and isinstance(videos[0], dict):
+                return videos[0].get("url") or videos[0].get("video_url")
+        return payload.get("url") or payload.get("video_url")
+
+    @staticmethod
     def _build_prompt(request: GenerateRequest, plan: DesignPlan) -> str:
         item_names = "、".join(item.name for item in plan.items[:6])
         return (
@@ -180,6 +298,14 @@ class RenderService:
             f"{request.house_property.value}，重点{request.video_focus.value}，包含{item_names}，"
             "温暖自然光，真实家装效果图，适合短视频开场。"
         )
+
+    @staticmethod
+    def _build_video_prompt(prompt: str, duration: int) -> str:
+        first_duration = max(1, min(2, duration - 1))
+        second_duration = max(1, duration - first_duration)
+        first = f"{prompt}，真实家装全景，竖屏短视频，镜头缓慢推进，无人物，无文字，无水印"
+        second = "家具软装商品细节展示，沙发、茶几、灯具、窗帘、地毯依次出现，真实材质，电商种草质感，温暖自然光"
+        return f"镜头 1, {first_duration}, {first}; 镜头 2, {second_duration}, {second};"
 
     def _draw_demo_render(self, output: Path, request: GenerateRequest, plan: DesignPlan, prompt: str) -> None:
         width, height = 1600, 1200

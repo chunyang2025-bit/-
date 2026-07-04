@@ -33,13 +33,15 @@ class VideoService:
         self._attach_product_images(scenes, output.stem)
         narration = "。".join(scene["title"] + "，" + scene["body"] for scene in scenes)
         audio_path = await self.tts.synthesize(narration[:3600], filename.replace(".mp4", ".mp3"))
-        self._render_movie(output, scenes, audio_path)
+        render_clip = Path(render.render_video_path) if render and render.render_video_path else None
+        self._render_movie(output, scenes, audio_path, render_clip)
         if not output.exists() or output.stat().st_size == 0:
             raise RuntimeError(f"视频生成失败，未生成有效 MP4：{output}")
+        render_clip_duration = render.render_video_duration_seconds if render_clip and render_clip.exists() else 0
         return GeneratedVideo(
             video_url=self.settings.public_url(f"/videos/{filename}"),
             video_path=str(output),
-            duration_seconds=round(sum(scene["duration"] for scene in scenes), 2),
+            duration_seconds=round(sum(scene["duration"] for scene in scenes) + (render_clip_duration or 0), 2),
             compliance_caption="AI 设计方案仅供参考｜商品来源：淘宝官方在售商品｜价格为实时券后价，以官网为准｜本内容由 AI 自动生成",
         )
 
@@ -132,9 +134,9 @@ class VideoService:
             response.raise_for_status()
         return Image.open(BytesIO(response.content)).convert("RGB")
 
-    def _render_movie(self, output: Path, scenes: list[dict], audio_path: Optional[Path]) -> None:
+    def _render_movie(self, output: Path, scenes: list[dict], audio_path: Optional[Path], render_clip: Optional[Path] = None) -> None:
         try:
-            self._render_with_ffmpeg(output, scenes, audio_path)
+            self._render_with_ffmpeg(output, scenes, audio_path, render_clip)
         except Exception as exc:
             self._render_storyboard_fallback(output, scenes)
             raise RuntimeError(
@@ -143,7 +145,7 @@ class VideoService:
                 f"错误日志：{output.with_suffix('.ffmpeg.log')}"
             ) from exc
 
-    def _render_with_ffmpeg(self, output: Path, scenes: list[dict], audio_path: Optional[Path]) -> None:
+    def _render_with_ffmpeg(self, output: Path, scenes: list[dict], audio_path: Optional[Path], render_clip: Optional[Path] = None) -> None:
         work_dir = self.settings.tmp_dir / output.stem
         work_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -161,7 +163,7 @@ class VideoService:
             lines.append(f"file '{frame_paths[-1]}'")
             concat_file.write_text("\n".join(lines), encoding="utf-8")
 
-            silent_output = work_dir / "silent.mp4" if audio_path and audio_path.exists() else output
+            silent_slides = work_dir / "slides_silent.mp4"
             self._run_ffmpeg(
                 [
                     "ffmpeg",
@@ -178,10 +180,16 @@ class VideoService:
                     "yuv420p",
                     "-fps_mode",
                     "cfr",
-                    str(silent_output),
+                    str(silent_slides),
                 ],
                 output.with_suffix(".ffmpeg.log"),
             )
+
+            silent_output = silent_slides
+            if render_clip and render_clip.exists():
+                merged_silent = work_dir / "merged_silent.mp4"
+                self._prepend_video_clip(render_clip, silent_slides, merged_silent, output.with_suffix(".ffmpeg.log"))
+                silent_output = merged_silent
 
             if audio_path and audio_path.exists():
                 self._run_ffmpeg(
@@ -201,8 +209,43 @@ class VideoService:
                     ],
                     output.with_suffix(".ffmpeg.log"),
                 )
+            else:
+                shutil.copyfile(silent_output, output)
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    def _prepend_video_clip(self, render_clip: Path, slideshow: Path, output: Path, log_path: Path) -> None:
+        width, height = self.settings.video_width, self.settings.video_height
+        duration = str(min(max(self.settings.render_duration, 3), 15))
+        filter_complex = (
+            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},setsar=1,fps=24[v0];"
+            f"[1:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},setsar=1,fps=24[v1];"
+            "[v0][v1]concat=n=2:v=1:a=0[v]"
+        )
+        self._run_ffmpeg(
+            [
+                "ffmpeg",
+                "-y",
+                "-t",
+                duration,
+                "-i",
+                str(render_clip),
+                "-i",
+                str(slideshow),
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[v]",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                str(output),
+            ],
+            log_path,
+        )
 
     @staticmethod
     def _run_ffmpeg(command: list[str], log_path: Path) -> None:

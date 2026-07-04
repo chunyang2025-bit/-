@@ -39,9 +39,21 @@ python scripts/tbk_debug.py
 
 如果 `realtime_products=0`，系统会使用“虚拟商品演示”生成完整视频和 Excel，用于内部演示流程。该模式会在视频和页面中明确标注，不应当作为真实淘宝商品内容发布。
 
-### 装修效果图不是实拍
+### 装修效果图/开场视频仍是演示素材
 
-当前 `RENDER_PROVIDER=demo` 会生成本地示意效果图，用于流程演示。要升级为更真实的装修视觉，可将 `services/render_service.py` 替换为可灵、即梦、通义万相等图像/视频生成 API。
+当前 `RENDER_PROVIDER=demo` 会生成本地示意效果图，用于流程演示。若已购买可灵“视频生成”资源包，请在 `.env` 使用文生视频配置：
+
+```env
+RENDER_PROVIDER=kling
+RENDER_KIND=video
+RENDER_API_URL=https://api-beijing.klingai.com
+RENDER_API_KEY=api-key-kling-xxxx
+RENDER_AUTH_PREFIX=Bearer
+RENDER_VIDEO_ENDPOINT=/text-to-video/kling-3.0-turbo
+RENDER_TASK_ENDPOINT=/tasks
+RENDER_ASPECT_RATIO=9:16
+RENDER_DURATION=5
+```
 
 可灵配置后先运行：
 
@@ -49,7 +61,7 @@ python scripts/tbk_debug.py
 python scripts/render_debug.py
 ```
 
-输出 `provider=kling` 且 `is_demo=False`，说明可灵效果图已接入。若仍为 `is_demo=True`，说明可灵接口失败并回退到了本地演示图。
+输出 `provider=kling-video`、`render_type=video`、`render_video=...mp4`，说明可灵文生视频已接入。若仍为 `is_demo=True`，说明接口失败并回退到了本地演示图，错误原因会写在 `prompt` 后面。
 
 ### 使用 DeepSeek 后没有配音
 

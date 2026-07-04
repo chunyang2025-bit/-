@@ -46,22 +46,27 @@ python scripts/smoke_test.py
 
 淘宝客物料权限审核期间，系统会使用明确标注的“虚拟商品演示”数据生成视频，便于演示端到端流程；该模式不可作为真实商品种草内容发布。
 
-当前装修效果图为本地生成的演示效果图，用于展示视频结构和空间氛围。接入外部图像/视频生成 API 后，可在 `RenderService` 内替换为真实 AI 生成效果图或图生视频。
+当前装修效果图默认为本地生成的演示效果图，用于展示视频结构和空间氛围。配置可灵文生视频后，系统会先生成一段真实 AI 家装动态素材，并自动接入最终 MP4 开场。
 
-可灵配置示例：
+可灵文生视频配置示例：
 
 ```env
 RENDER_PROVIDER=kling
-RENDER_API_URL=https://api.klingai.com
-RENDER_API_KEY=你的可灵APIKey
-RENDER_ENDPOINT=/v1/images/generations
+RENDER_KIND=video
+RENDER_API_URL=https://api-beijing.klingai.com
+RENDER_API_KEY=api-key-kling-xxxx
+RENDER_API_SECRET=
 RENDER_AUTH_HEADER=Authorization
 RENDER_AUTH_PREFIX=Bearer
-RENDER_MODEL=kling-v1
-RENDER_ASPECT_RATIO=16:9
+RENDER_VIDEO_ENDPOINT=/text-to-video/kling-3.0-turbo
+RENDER_TASK_ENDPOINT=/tasks
+RENDER_RESOLUTION=720p
+RENDER_ASPECT_RATIO=9:16
+RENDER_DURATION=5
+RENDER_POLL_SECONDS=180
 ```
 
-配置后可先运行 `python scripts/render_debug.py` 单独测试效果图生成。
+配置后可先运行 `python scripts/render_debug.py` 单独测试。输出 `provider=kling-video`、`render_type=video`、`render_video=...mp4`，说明已走通可灵视频接口。
 
 如果后续使用图生视频或把装修图传给国内平台，必须确保图片 URL 可公网访问。请将 `APP_BASE_URL` 配成公网域名或公网 IP，例如：
 

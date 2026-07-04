@@ -43,6 +43,10 @@ def main() -> int:
     print("SMOKE_OK")
     print(f"video={video_path}")
     print(f"render={render_path}")
+    if data["render"].get("render_video_path"):
+        render_video_path = Path(data["render"]["render_video_path"])
+        assert render_video_path.exists() and render_video_path.stat().st_size > 0, render_video_path
+        print(f"render_video={render_video_path}")
     print(f"excel={excel_path}")
     print(f"products={len(products)}")
     print(f"realtime_products={realtime_count}")

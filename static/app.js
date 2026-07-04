@@ -5,6 +5,7 @@ const resultTitle = document.querySelector("#resultTitle");
 const excelLink = document.querySelector("#excelLink");
 const videoPreview = document.querySelector("#videoPreview");
 const renderPreview = document.querySelector("#renderPreview");
+const renderVideoPreview = document.querySelector("#renderVideoPreview");
 
 function yuan(value) {
   return `¥${Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
@@ -49,6 +50,13 @@ function render(data) {
 
   videoPreview.src = data.video.video_url;
   renderPreview.src = data.render.render_url;
+  if (data.render.render_video_url) {
+    renderVideoPreview.src = data.render.render_video_url;
+    renderVideoPreview.hidden = false;
+  } else {
+    renderVideoPreview.removeAttribute("src");
+    renderVideoPreview.hidden = true;
+  }
   document.querySelector("#renderPrompt").textContent = data.render.prompt;
   excelLink.href = data.excel.excel_url;
   excelLink.classList.remove("disabled");

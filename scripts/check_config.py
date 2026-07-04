@@ -26,6 +26,12 @@ def main() -> int:
         "tbk_app_key": bool(settings.tbk_app_key),
         "tbk_app_secret": bool(settings.tbk_app_secret),
         "tbk_adzone_id": bool(settings.tbk_adzone_id),
+        "render_video_ready": bool(
+            (settings.render_provider or "").lower() == "kling"
+            and (settings.render_kind or "").lower() == "video"
+            and settings.render_api_url
+            and settings.render_api_key
+        ),
         "storage_writable": _writable(settings.tmp_dir),
     }
 

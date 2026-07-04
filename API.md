@@ -52,13 +52,17 @@ Base URL：`https://your-domain.com`
 
 ## POST `/api/generate_render`
 
-生成装修效果图资产。当前默认返回本地演示图，字段包含：
+生成装修视觉资产。默认返回本地演示图；配置 `RENDER_KIND=video` 后会调用可灵文生视频，字段包含：
 
 - `render_url`
 - `render_path`
 - `prompt`
 - `provider`
 - `is_demo`
+- `render_type`
+- `render_video_url`
+- `render_video_path`
+- `render_task_id`
 
 ## POST `/api/export_excel`
 

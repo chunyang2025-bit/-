@@ -148,6 +148,11 @@ class RenderedAsset(BaseModel):
     prompt: str
     provider: str
     is_demo: bool = True
+    render_type: str = "image"
+    render_video_url: Optional[str] = None
+    render_video_path: Optional[str] = None
+    render_task_id: Optional[str] = None
+    render_video_duration_seconds: Optional[float] = None
 
 
 class ExportExcelRequest(BaseModel):

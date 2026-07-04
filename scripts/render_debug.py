@@ -28,7 +28,11 @@ async def main() -> int:
     print("RENDER_OK")
     print(f"provider={render.provider}")
     print(f"is_demo={render.is_demo}")
+    print(f"render_type={render.render_type}")
     print(f"render={render.render_path}")
+    if render.render_video_path:
+        print(f"render_video={render.render_video_path}")
+        print(f"render_task_id={render.render_task_id}")
     print(f"prompt={render.prompt}")
     return 0
 
