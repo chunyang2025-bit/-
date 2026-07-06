@@ -84,29 +84,45 @@ async def main() -> int:
         print(f"sub_code={error.get('sub_code')}")
         print(f"sub_msg={error.get('sub_msg')}")
         print(f"request_id={error.get('request_id')}")
-        fallback = await service._request_tbk_item_get("奶油风 沙发")
-        if "error_response" in fallback:
-            fallback_error = fallback["error_response"]
-            print("TBK_FALLBACK_ERROR")
-            print(f"code={fallback_error.get('code')}")
-            print(f"msg={fallback_error.get('msg')}")
-            print(f"sub_code={fallback_error.get('sub_code')}")
-            print(f"sub_msg={fallback_error.get('sub_msg')}")
-            print(f"request_id={fallback_error.get('request_id')}")
+        if not service._is_permission_error(error):
             return 1
-        fallback_items = (
-            fallback.get("tbk_item_get_response", {})
-            .get("results", {})
-            .get("n_tbk_item", [])
-        )
-        print("TBK_FALLBACK_OK")
-        print(f"raw_items={len(fallback_items)}")
-        if fallback_items:
-            first = fallback_items[0]
-            print(f"first_title={first.get('title')}")
-            print(f"first_price={first.get('zk_final_price')}")
-            print(f"first_image_set={bool(first.get('pict_url'))}")
-        return 0
+
+        print("TBK_RECOMMEND_FALLBACK")
+        fallback_material_ids = service._material_ids()
+        if not fallback_material_ids:
+            print("material_id=MISSING")
+            return 1
+        for material_id in fallback_material_ids:
+            fallback = await service._request_tbk_recommend(material_id)
+            if "error_response" in fallback:
+                fallback_error = fallback["error_response"]
+                print("TBK_RECOMMEND_FALLBACK_ERROR")
+                print(f"material_id={material_id}")
+                print(f"code={fallback_error.get('code')}")
+                print(f"msg={fallback_error.get('msg')}")
+                print(f"sub_code={fallback_error.get('sub_code')}")
+                print(f"sub_msg={fallback_error.get('sub_msg')}")
+                print(f"request_id={fallback_error.get('request_id')}")
+                continue
+            fallback_items = (
+                fallback.get("tbk_dg_material_recommend_response", {})
+                .get("result_list", {})
+                .get("map_data", [])
+            )
+            products = [product for product in (service._map_product(item) for item in fallback_items) if product]
+            image_products = [product for product in products if product.image_url]
+            print("TBK_RECOMMEND_FALLBACK_OK")
+            print(f"material_id={material_id}")
+            print(f"raw_items={len(fallback_items)}")
+            print(f"mapped_items={len(products)}")
+            print(f"image_items={len(image_products)}")
+            if products:
+                first = products[0]
+                print(f"first_title={first.title}")
+                print(f"first_price={first.final_price}")
+                print(f"first_image_set={bool(first.image_url)}")
+                return 0
+        return 1
 
     items = (
         payload.get("tbk_dg_material_recommend_response", {})

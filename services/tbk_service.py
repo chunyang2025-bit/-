@@ -37,44 +37,17 @@ class TaobaoTbkService:
     async def _search_tbk(self, item: DesignItem, budget_max: int) -> List[Product]:
         raw_items: List[Dict[str, Any]] = []
         if self.settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
-            material_ids = self._material_ids()
-            if not material_ids:
-                self.last_errors.append(f"{item.name}: TBK_MATERIAL_ID 未配置")
-            for material_id in material_ids:
-                payload = await self._request_tbk_recommend(material_id)
-                error = payload.get("error_response")
-                if error:
-                    self.last_errors.append(
-                        f"{item.name}: TBK 物料精选错误 material_id={material_id} "
-                        f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
-                    )
-                    continue
-                raw_items = (
-                    payload.get("tbk_dg_material_recommend_response", {})
-                    .get("result_list", {})
-                    .get("map_data", [])
-                )
-                products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
-                relevant_products = self._relevant_products(products, item)
-                if not relevant_products and products:
-                    self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未命中单品关键词，已跳过")
-                    continue
-                filtered = self._filter_products(relevant_products, item, budget_max)
-                if filtered:
-                    self.last_errors.append(
-                        f"{item.name}: 使用 taobao.tbk.dg.material.recommend 官方物料 material_id={material_id}"
-                    )
-                    return filtered
-                if raw_items:
-                    self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未匹配预算/图片/关键词")
-            return []
+            return await self._search_recommend_products(item, budget_max)
         else:
+            optional_permission_denied = False
             material_ids: List[Optional[str]] = self._material_ids() or [None]
             for material_id in material_ids:
                 for has_coupon in ["true", "false"]:
                     payload = await self._request_tbk(item.taobao_keyword, has_coupon, material_id)
                     error = payload.get("error_response")
                     if error:
+                        if self._is_permission_error(error):
+                            optional_permission_denied = True
                         suffix = f" material_id={material_id}" if material_id else ""
                         self.last_errors.append(
                             f"{item.name}: TBK optional 错误{suffix} "
@@ -92,6 +65,9 @@ class TaobaoTbkService:
                         break
                 if raw_items:
                     break
+            if not raw_items and optional_permission_denied:
+                self.last_errors.append(f"{item.name}: optional 接口无权限，自动回退 taobao.tbk.dg.material.recommend")
+                return await self._search_recommend_products(item, budget_max)
 
         if not raw_items and self.settings.tbk_search_method not in {
             "taobao.tbk.dg.material.recommend",
@@ -111,6 +87,39 @@ class TaobaoTbkService:
 
         products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
         return self._filter_products(products, item, budget_max)
+
+    async def _search_recommend_products(self, item: DesignItem, budget_max: int) -> List[Product]:
+        material_ids = self._material_ids()
+        if not material_ids:
+            self.last_errors.append(f"{item.name}: TBK_MATERIAL_ID 未配置")
+        for material_id in material_ids:
+            payload = await self._request_tbk_recommend(material_id)
+            error = payload.get("error_response")
+            if error:
+                self.last_errors.append(
+                    f"{item.name}: TBK 物料精选错误 material_id={material_id} "
+                    f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
+                )
+                continue
+            raw_items = (
+                payload.get("tbk_dg_material_recommend_response", {})
+                .get("result_list", {})
+                .get("map_data", [])
+            )
+            products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
+            relevant_products = self._relevant_products(products, item)
+            if not relevant_products and products:
+                self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未命中单品关键词，已跳过")
+                continue
+            filtered = self._filter_products(relevant_products, item, budget_max)
+            if filtered:
+                self.last_errors.append(
+                    f"{item.name}: 使用 taobao.tbk.dg.material.recommend 官方物料 material_id={material_id}"
+                )
+                return filtered
+            if raw_items:
+                self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未匹配预算/图片/关键词")
+        return []
 
     async def _request_tbk(
         self,
@@ -199,6 +208,10 @@ class TaobaoTbkService:
     def _material_ids(self) -> List[str]:
         raw = self.settings.tbk_material_id or ""
         return [part.strip() for part in re.split(r"[,，\s]+", raw) if part.strip()]
+
+    @staticmethod
+    def _is_permission_error(error: Dict[str, Any]) -> bool:
+        return str(error.get("code")) == "11" or error.get("sub_code") == "isv.permission-api-package-limit"
 
     def _relevant_products(self, products: List[Product], item: DesignItem) -> List[Product]:
         tokens = self._relevance_tokens(item)
