@@ -2,6 +2,7 @@ import hashlib
 import re
 import time
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
 
 import httpx
 
