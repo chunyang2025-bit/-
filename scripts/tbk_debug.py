@@ -25,6 +25,8 @@ async def main() -> int:
 
     service = TaobaoTbkService(settings)
     if settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
+        print("query_mode=local_title_relevance")
+        print("query_note=recommend接口不支持q参数，系统会拉取官方物料后按商品标题本地匹配单品关键词")
         material_ids = service._material_ids()
         if not material_ids:
             print("TBK_RECOMMEND_ERROR")
