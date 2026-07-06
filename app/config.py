@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     tbk_pid: Optional[str] = None
     tbk_site_id: Optional[str] = None
     tbk_api_url: str = "https://eco.taobao.com/router/rest"
-    tbk_search_method: str = "taobao.tbk.dg.material.temporary.optional"
+    tbk_search_method: str = "taobao.tbk.dg.material.optional"
     tbk_material_id: Optional[str] = None
     tbk_min_commission_rate: int = 1000
     tbk_min_sales: int = 20
@@ -116,7 +116,24 @@ class Settings(BaseSettings):
 
     @property
     def has_tbk(self) -> bool:
-        return bool(self.tbk_app_key and self.tbk_app_secret and self.tbk_adzone_id)
+        return bool(self.tbk_app_key and self.tbk_app_secret and self.tbk_effective_adzone_id)
+
+    @property
+    def tbk_effective_site_id(self) -> Optional[str]:
+        return self.tbk_site_id or self._pid_part(1)
+
+    @property
+    def tbk_effective_adzone_id(self) -> Optional[str]:
+        return self.tbk_adzone_id or self._pid_part(2)
+
+    def _pid_part(self, index: int) -> Optional[str]:
+        if not self.tbk_pid:
+            return None
+        parts = self.tbk_pid.split("_")
+        if len(parts) != 4 or parts[0] != "mm":
+            return None
+        value = parts[index + 1].strip()
+        return value or None
 
     def public_url(self, path: str) -> str:
         if path.startswith("http://") or path.startswith("https://"):

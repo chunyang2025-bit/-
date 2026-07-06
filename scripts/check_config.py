@@ -25,7 +25,7 @@ def main() -> int:
         "tts_available": settings.has_tts,
         "tbk_app_key": bool(settings.tbk_app_key),
         "tbk_app_secret": bool(settings.tbk_app_secret),
-        "tbk_adzone_id": bool(settings.tbk_adzone_id),
+        "tbk_adzone_id": bool(settings.tbk_effective_adzone_id),
         "render_video_ready": bool(
             (settings.render_provider or "").lower() == "kling"
             and (settings.render_kind or "").lower() == "video"

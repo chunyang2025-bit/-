@@ -134,15 +134,15 @@ class TaobaoTbkService:
             "format": "json",
             "v": "2.0",
             "sign_method": "md5",
-            "adzone_id": self.settings.tbk_adzone_id,
+            "adzone_id": self.settings.tbk_effective_adzone_id,
             "q": keyword,
             "page_size": "20",
             "sort": "total_sales_des",
             "platform": "2",
             "has_coupon": has_coupon,
         }
-        if self.settings.tbk_site_id:
-            params["site_id"] = self.settings.tbk_site_id
+        if self.settings.tbk_effective_site_id:
+            params["site_id"] = self.settings.tbk_effective_site_id
         if material_id and self.settings.tbk_search_method in TBK_OPTIONAL_METHODS:
             params["material_id"] = material_id
         params["sign"] = self._sign(params)
@@ -167,7 +167,7 @@ class TaobaoTbkService:
             "format": "json",
             "v": "2.0",
             "sign_method": "md5",
-            "adzone_id": self.settings.tbk_adzone_id,
+            "adzone_id": self.settings.tbk_effective_adzone_id,
             "material_id": selected_material_id,
             "page_no": "1",
             "page_size": "100",
