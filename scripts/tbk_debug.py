@@ -7,7 +7,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.config import get_settings
-from services.tbk_service import TaobaoTbkService
+from services.tbk_service import TBK_RECOMMEND_METHOD, TaobaoTbkService
 
 
 async def main() -> int:
@@ -24,7 +24,7 @@ async def main() -> int:
     print(f"adzone_id={settings.tbk_adzone_id}")
 
     service = TaobaoTbkService(settings)
-    if settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
+    if settings.tbk_search_method == TBK_RECOMMEND_METHOD:
         print("query_mode=local_title_relevance")
         print("query_note=recommend接口不支持q参数，系统会拉取官方物料后按商品标题本地匹配单品关键词")
         material_ids = service._material_ids()
@@ -48,11 +48,7 @@ async def main() -> int:
                 print(f"request_id={error.get('request_id')}")
                 continue
 
-            items = (
-                payload.get("tbk_dg_material_recommend_response", {})
-                .get("result_list", {})
-                .get("map_data", [])
-            )
+            items = service._extract_map_data(payload)
             products = [product for product in (service._map_product(item) for item in items) if product]
             image_products = [product for product in products if product.image_url]
             print("TBK_RECOMMEND_OK")
@@ -84,9 +80,6 @@ async def main() -> int:
         print(f"sub_code={error.get('sub_code')}")
         print(f"sub_msg={error.get('sub_msg')}")
         print(f"request_id={error.get('request_id')}")
-        if not service._is_permission_error(error):
-            return 1
-
         print("TBK_RECOMMEND_FALLBACK")
         fallback_material_ids = service._material_ids()
         if not fallback_material_ids:
@@ -104,11 +97,7 @@ async def main() -> int:
                 print(f"sub_msg={fallback_error.get('sub_msg')}")
                 print(f"request_id={fallback_error.get('request_id')}")
                 continue
-            fallback_items = (
-                fallback.get("tbk_dg_material_recommend_response", {})
-                .get("result_list", {})
-                .get("map_data", [])
-            )
+            fallback_items = service._extract_map_data(fallback)
             products = [product for product in (service._map_product(item) for item in fallback_items) if product]
             image_products = [product for product in products if product.image_url]
             print("TBK_RECOMMEND_FALLBACK_OK")
@@ -124,14 +113,7 @@ async def main() -> int:
                 return 0
         return 1
 
-    items = (
-        payload.get("tbk_dg_material_recommend_response", {})
-        .get("result_list", {})
-        .get("map_data", [])
-        or payload.get("tbk_dg_material_optional_response", {})
-        .get("result_list", {})
-        .get("map_data", [])
-    )
+    items = service._extract_map_data(payload)
     print("TBK_OK")
     print(f"raw_items={len(items)}")
     if items:

@@ -10,6 +10,13 @@ from app.config import Settings
 from app.models import DesignItem, Product, ProductMatch
 
 
+TBK_RECOMMEND_METHOD = "taobao.tbk.dg.material.recommend"
+TBK_OPTIONAL_METHODS = {
+    "taobao.tbk.dg.material.optional",
+    "taobao.tbk.dg.material.temporary.optional",
+}
+
+
 class TaobaoTbkService:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -36,42 +43,39 @@ class TaobaoTbkService:
 
     async def _search_tbk(self, item: DesignItem, budget_max: int) -> List[Product]:
         raw_items: List[Dict[str, Any]] = []
-        if self.settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
+        if self.settings.tbk_search_method == TBK_RECOMMEND_METHOD:
             return await self._search_recommend_products(item, budget_max)
         else:
-            optional_permission_denied = False
+            optional_request_failed = False
             material_ids: List[Optional[str]] = self._material_ids() or [None]
             for material_id in material_ids:
                 for has_coupon in ["true", "false"]:
                     payload = await self._request_tbk(item.taobao_keyword, has_coupon, material_id)
                     error = payload.get("error_response")
                     if error:
-                        if self._is_permission_error(error):
-                            optional_permission_denied = True
+                        optional_request_failed = True
                         suffix = f" material_id={material_id}" if material_id else ""
                         self.last_errors.append(
                             f"{item.name}: TBK optional 错误{suffix} "
                             f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
                         )
                         continue
-                    raw_items = (
-                        payload.get("tbk_dg_material_optional_response", {})
-                        .get("result_list", {})
-                        .get("map_data", [])
-                    )
+                    raw_items = self._extract_map_data(payload)
                     if raw_items:
                         suffix = f" material_id={material_id}" if material_id else ""
-                        self.last_errors.append(f"{item.name}: 使用 taobao.tbk.dg.material.optional 关键词搜索{suffix}")
+                        self.last_errors.append(
+                            f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索{suffix}"
+                        )
                         break
                 if raw_items:
                     break
-            if not raw_items and optional_permission_denied:
-                self.last_errors.append(f"{item.name}: optional 接口无权限，自动回退 taobao.tbk.dg.material.recommend")
+            if not raw_items and optional_request_failed:
+                self.last_errors.append(f"{item.name}: optional 接口暂不可用，自动回退 taobao.tbk.dg.material.recommend")
                 return await self._search_recommend_products(item, budget_max)
 
         if not raw_items and self.settings.tbk_search_method not in {
-            "taobao.tbk.dg.material.recommend",
-            "taobao.tbk.dg.material.optional",
+            TBK_RECOMMEND_METHOD,
+            *TBK_OPTIONAL_METHODS,
         }:
             fallback_payload = await self._request_tbk_item_get(item.taobao_keyword)
             error = fallback_payload.get("error_response")
@@ -101,11 +105,7 @@ class TaobaoTbkService:
                     f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
                 )
                 continue
-            raw_items = (
-                payload.get("tbk_dg_material_recommend_response", {})
-                .get("result_list", {})
-                .get("map_data", [])
-            )
+            raw_items = self._extract_map_data(payload)
             products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
             relevant_products = self._relevant_products(products, item)
             if not relevant_products and products:
@@ -143,7 +143,7 @@ class TaobaoTbkService:
         }
         if self.settings.tbk_site_id:
             params["site_id"] = self.settings.tbk_site_id
-        if material_id and self.settings.tbk_search_method == "taobao.tbk.dg.material.optional":
+        if material_id and self.settings.tbk_search_method in TBK_OPTIONAL_METHODS:
             params["material_id"] = material_id
         params["sign"] = self._sign(params)
         async with httpx.AsyncClient(timeout=20) as client:
@@ -161,7 +161,7 @@ class TaobaoTbkService:
                 }
             }
         params = {
-            "method": "taobao.tbk.dg.material.recommend",
+            "method": TBK_RECOMMEND_METHOD,
             "app_key": self.settings.tbk_app_key,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "format": "json",
@@ -210,8 +210,27 @@ class TaobaoTbkService:
         return [part.strip() for part in re.split(r"[,，\s]+", raw) if part.strip()]
 
     @staticmethod
-    def _is_permission_error(error: Dict[str, Any]) -> bool:
-        return str(error.get("code")) == "11" or error.get("sub_code") == "isv.permission-api-package-limit"
+    def _extract_map_data(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        response_keys = [
+            "tbk_dg_material_optional_response",
+            "tbk_dg_material_temporary_optional_response",
+            "tbk_dg_material_recommend_response",
+        ]
+        for key in response_keys:
+            items = (
+                payload.get(key, {})
+                .get("result_list", {})
+                .get("map_data", [])
+            )
+            if items:
+                return items
+        for value in payload.values():
+            if not isinstance(value, dict):
+                continue
+            items = value.get("result_list", {}).get("map_data", [])
+            if items:
+                return items
+        return []
 
     def _relevant_products(self, products: List[Product], item: DesignItem) -> List[Product]:
         tokens = self._relevance_tokens(item)
