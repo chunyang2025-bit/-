@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     tbk_pid: Optional[str] = None
     tbk_site_id: Optional[str] = None
     tbk_api_url: str = "https://eco.taobao.com/router/rest"
+    tbk_search_method: str = "taobao.tbk.dg.material.optional"
     tbk_min_commission_rate: int = 1000
     tbk_min_sales: int = 20
     tbk_strict_filters: bool = False
@@ -76,6 +77,7 @@ class Settings(BaseSettings):
         "tbk_pid",
         "tbk_site_id",
         "tbk_api_url",
+        "tbk_search_method",
         "render_provider",
         "render_api_url",
         "render_api_key",

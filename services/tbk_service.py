@@ -49,12 +49,25 @@ class TaobaoTbkService:
             if raw_items:
                 break
 
+        if not raw_items:
+            fallback_payload = await self._request_tbk_item_get(item.taobao_keyword)
+            error = fallback_payload.get("error_response")
+            if error:
+                self.last_errors.append(f"{item.name}: TBK 备用查询错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
+            raw_items = (
+                fallback_payload.get("tbk_item_get_response", {})
+                .get("results", {})
+                .get("n_tbk_item", [])
+            )
+            if raw_items:
+                self.last_errors.append(f"{item.name}: 使用 taobao.tbk.item.get 备用真实商品查询")
+
         products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
         return self._filter_products(products, item, budget_max)
 
     async def _request_tbk(self, keyword: str, has_coupon: str) -> Dict[str, Any]:
         params = {
-            "method": "taobao.tbk.dg.material.optional",
+            "method": self.settings.tbk_search_method,
             "app_key": self.settings.tbk_app_key,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "format": "json",
@@ -69,6 +82,27 @@ class TaobaoTbkService:
         }
         if self.settings.tbk_site_id:
             params["site_id"] = self.settings.tbk_site_id
+        params["sign"] = self._sign(params)
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(self.settings.tbk_api_url, params=params)
+            response.raise_for_status()
+            return response.json()
+
+    async def _request_tbk_item_get(self, keyword: str) -> Dict[str, Any]:
+        params = {
+            "method": "taobao.tbk.item.get",
+            "app_key": self.settings.tbk_app_key,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "format": "json",
+            "v": "2.0",
+            "sign_method": "md5",
+            "fields": "num_iid,title,pict_url,small_images,reserve_price,zk_final_price,user_type,provcity,item_url,nick,volume",
+            "q": keyword,
+            "page_no": "1",
+            "page_size": "20",
+            "sort": "total_sales_des",
+            "platform": "2",
+        }
         params["sign"] = self._sign(params)
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(self.settings.tbk_api_url, params=params)
@@ -95,7 +129,7 @@ class TaobaoTbkService:
                 coupon_price=coupon_price,
                 image_url=self._normalize_image(image_url),
                 item_url=self._normalize_url(raw.get("coupon_share_url") or raw.get("url") or raw.get("item_url")),
-                shop_name=raw.get("shop_title") or "淘宝店铺",
+                shop_name=raw.get("shop_title") or raw.get("nick") or "淘宝店铺",
                 commission_rate=float(raw.get("commission_rate") or 0) / 100,
                 sales=int(raw.get("volume") or 0),
                 source="淘宝联盟 TBK",
