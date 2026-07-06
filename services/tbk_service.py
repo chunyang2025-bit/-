@@ -54,8 +54,11 @@ class TaobaoTbkService:
                     .get("map_data", [])
                 )
                 products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
-                products = self._prefer_relevant_products(products, item)
-                filtered = self._filter_products(products, item, budget_max)
+                relevant_products = self._relevant_products(products, item)
+                if not relevant_products and products:
+                    self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未命中单品关键词，已跳过")
+                    continue
+                filtered = self._filter_products(relevant_products, item, budget_max)
                 if filtered:
                     self.last_errors.append(
                         f"{item.name}: 使用 taobao.tbk.dg.material.recommend 官方物料 material_id={material_id}"
@@ -176,16 +179,15 @@ class TaobaoTbkService:
         raw = self.settings.tbk_material_id or ""
         return [part.strip() for part in re.split(r"[,，\s]+", raw) if part.strip()]
 
-    def _prefer_relevant_products(self, products: List[Product], item: DesignItem) -> List[Product]:
+    def _relevant_products(self, products: List[Product], item: DesignItem) -> List[Product]:
         tokens = self._relevance_tokens(item)
         if not tokens:
             return products
-        relevant = [
+        return [
             product
             for product in products
-            if any(token in product.title or token in product.shop_name for token in tokens)
+            if any(token in f"{product.title} {product.shop_name}" for token in tokens)
         ]
-        return relevant or products
 
     @staticmethod
     def _relevance_tokens(item: DesignItem) -> List[str]:
