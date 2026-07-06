@@ -1,6 +1,6 @@
 import hashlib
+import re
 import time
-from urllib.parse import quote_plus
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -36,17 +36,34 @@ class TaobaoTbkService:
     async def _search_tbk(self, item: DesignItem, budget_max: int) -> List[Product]:
         raw_items: List[Dict[str, Any]] = []
         if self.settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
-            payload = await self._request_tbk_recommend()
-            error = payload.get("error_response")
-            if error:
-                self.last_errors.append(f"{item.name}: TBK 物料精选错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
-            raw_items = (
-                payload.get("tbk_dg_material_recommend_response", {})
-                .get("result_list", {})
-                .get("map_data", [])
-            )
-            if raw_items:
-                self.last_errors.append(f"{item.name}: 使用 taobao.tbk.dg.material.recommend 官方物料")
+            material_ids = self._material_ids()
+            if not material_ids:
+                self.last_errors.append(f"{item.name}: TBK_MATERIAL_ID 未配置")
+            for material_id in material_ids:
+                payload = await self._request_tbk_recommend(material_id)
+                error = payload.get("error_response")
+                if error:
+                    self.last_errors.append(
+                        f"{item.name}: TBK 物料精选错误 material_id={material_id} "
+                        f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
+                    )
+                    continue
+                raw_items = (
+                    payload.get("tbk_dg_material_recommend_response", {})
+                    .get("result_list", {})
+                    .get("map_data", [])
+                )
+                products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
+                products = self._prefer_relevant_products(products, item)
+                filtered = self._filter_products(products, item, budget_max)
+                if filtered:
+                    self.last_errors.append(
+                        f"{item.name}: 使用 taobao.tbk.dg.material.recommend 官方物料 material_id={material_id}"
+                    )
+                    return filtered
+                if raw_items:
+                    self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未匹配预算/图片/关键词")
+            return []
         else:
             for has_coupon in ["true", "false"]:
                 payload = await self._request_tbk(item.taobao_keyword, has_coupon)
@@ -62,7 +79,7 @@ class TaobaoTbkService:
                 if raw_items:
                     break
 
-        if not raw_items:
+        if not raw_items and self.settings.tbk_search_method != "taobao.tbk.dg.material.recommend":
             fallback_payload = await self._request_tbk_item_get(item.taobao_keyword)
             error = fallback_payload.get("error_response")
             if error:
@@ -101,8 +118,9 @@ class TaobaoTbkService:
             response.raise_for_status()
             return response.json()
 
-    async def _request_tbk_recommend(self) -> Dict[str, Any]:
-        if not self.settings.tbk_material_id:
+    async def _request_tbk_recommend(self, material_id: Optional[str] = None) -> Dict[str, Any]:
+        selected_material_id = material_id or (self._material_ids()[0] if self._material_ids() else None)
+        if not selected_material_id:
             return {
                 "error_response": {
                     "code": "LOCAL_MISSING_MATERIAL_ID",
@@ -117,7 +135,7 @@ class TaobaoTbkService:
             "v": "2.0",
             "sign_method": "md5",
             "adzone_id": self.settings.tbk_adzone_id,
-            "material_id": self.settings.tbk_material_id,
+            "material_id": selected_material_id,
             "page_no": "1",
             "page_size": "100",
         }
@@ -153,6 +171,44 @@ class TaobaoTbkService:
         ordered = "".join(f"{key}{params[key]}" for key in sorted(params) if params[key] is not None and key != "sign")
         raw = f"{self.settings.tbk_app_secret}{ordered}{self.settings.tbk_app_secret}"
         return hashlib.md5(raw.encode("utf-8")).hexdigest().upper()
+
+    def _material_ids(self) -> List[str]:
+        raw = self.settings.tbk_material_id or ""
+        return [part.strip() for part in re.split(r"[,，\s]+", raw) if part.strip()]
+
+    def _prefer_relevant_products(self, products: List[Product], item: DesignItem) -> List[Product]:
+        tokens = self._relevance_tokens(item)
+        if not tokens:
+            return products
+        relevant = [
+            product
+            for product in products
+            if any(token in product.title or token in product.shop_name for token in tokens)
+        ]
+        return relevant or products
+
+    @staticmethod
+    def _relevance_tokens(item: DesignItem) -> List[str]:
+        text = f"{item.name} {item.material} {item.scene} {item.taobao_keyword}"
+        seeds = [
+            "沙发",
+            "茶几",
+            "桌",
+            "柜",
+            "灯",
+            "窗帘",
+            "地毯",
+            "床",
+            "椅",
+            "置物",
+            "收纳",
+            "挂画",
+            "抱枕",
+            "床品",
+            "镜",
+            "餐具",
+        ]
+        return [token for token in seeds if token in text]
 
     def _map_product(self, raw: Dict[str, Any]) -> Optional[Product]:
         try:

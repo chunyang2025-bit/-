@@ -24,10 +24,52 @@ async def main() -> int:
     print(f"adzone_id={settings.tbk_adzone_id}")
 
     service = TaobaoTbkService(settings)
+    if settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
+        material_ids = service._material_ids()
+        if not material_ids:
+            print("TBK_RECOMMEND_ERROR")
+            print("material_id=MISSING")
+            print("msg=TBK_MATERIAL_ID 未配置")
+            return 1
+
+        has_success = False
+        for material_id in material_ids:
+            payload = await service._request_tbk_recommend(material_id)
+            if "error_response" in payload:
+                error = payload["error_response"]
+                print("TBK_RECOMMEND_ERROR")
+                print(f"material_id={material_id}")
+                print(f"code={error.get('code')}")
+                print(f"msg={error.get('msg')}")
+                print(f"sub_code={error.get('sub_code')}")
+                print(f"sub_msg={error.get('sub_msg')}")
+                print(f"request_id={error.get('request_id')}")
+                continue
+
+            items = (
+                payload.get("tbk_dg_material_recommend_response", {})
+                .get("result_list", {})
+                .get("map_data", [])
+            )
+            products = [product for product in (service._map_product(item) for item in items) if product]
+            image_products = [product for product in products if product.image_url]
+            print("TBK_RECOMMEND_OK")
+            print(f"material_id={material_id}")
+            print(f"raw_items={len(items)}")
+            print(f"mapped_items={len(products)}")
+            print(f"image_items={len(image_products)}")
+            if products:
+                first = products[0]
+                print(f"first_title={first.title}")
+                print(f"first_price={first.final_price}")
+                print(f"first_image_set={bool(first.image_url)}")
+                has_success = True
+            if image_products:
+                break
+        return 0 if has_success else 1
+
     payload = (
-        await service._request_tbk_recommend()
-        if settings.tbk_search_method == "taobao.tbk.dg.material.recommend"
-        else await service._request_tbk("奶油风 沙发", "false")
+        await service._request_tbk("奶油风 沙发", "false")
     )
     if "error_response" in payload:
         error = payload["error_response"]
