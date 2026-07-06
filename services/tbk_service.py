@@ -69,21 +69,34 @@ class TaobaoTbkService:
                     self.last_errors.append(f"{item.name}: material_id={material_id} 有返回但未匹配预算/图片/关键词")
             return []
         else:
-            for has_coupon in ["true", "false"]:
-                payload = await self._request_tbk(item.taobao_keyword, has_coupon)
-                error = payload.get("error_response")
-                if error:
-                    self.last_errors.append(f"{item.name}: TBK 错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
-                    continue
-                raw_items = (
-                    payload.get("tbk_dg_material_optional_response", {})
-                    .get("result_list", {})
-                    .get("map_data", [])
-                )
+            material_ids: List[Optional[str]] = self._material_ids() or [None]
+            for material_id in material_ids:
+                for has_coupon in ["true", "false"]:
+                    payload = await self._request_tbk(item.taobao_keyword, has_coupon, material_id)
+                    error = payload.get("error_response")
+                    if error:
+                        suffix = f" material_id={material_id}" if material_id else ""
+                        self.last_errors.append(
+                            f"{item.name}: TBK optional 错误{suffix} "
+                            f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
+                        )
+                        continue
+                    raw_items = (
+                        payload.get("tbk_dg_material_optional_response", {})
+                        .get("result_list", {})
+                        .get("map_data", [])
+                    )
+                    if raw_items:
+                        suffix = f" material_id={material_id}" if material_id else ""
+                        self.last_errors.append(f"{item.name}: 使用 taobao.tbk.dg.material.optional 关键词搜索{suffix}")
+                        break
                 if raw_items:
                     break
 
-        if not raw_items and self.settings.tbk_search_method != "taobao.tbk.dg.material.recommend":
+        if not raw_items and self.settings.tbk_search_method not in {
+            "taobao.tbk.dg.material.recommend",
+            "taobao.tbk.dg.material.optional",
+        }:
             fallback_payload = await self._request_tbk_item_get(item.taobao_keyword)
             error = fallback_payload.get("error_response")
             if error:
@@ -99,7 +112,12 @@ class TaobaoTbkService:
         products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
         return self._filter_products(products, item, budget_max)
 
-    async def _request_tbk(self, keyword: str, has_coupon: str) -> Dict[str, Any]:
+    async def _request_tbk(
+        self,
+        keyword: str,
+        has_coupon: str,
+        material_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         params = {
             "method": self.settings.tbk_search_method,
             "app_key": self.settings.tbk_app_key,
@@ -116,6 +134,8 @@ class TaobaoTbkService:
         }
         if self.settings.tbk_site_id:
             params["site_id"] = self.settings.tbk_site_id
+        if material_id and self.settings.tbk_search_method == "taobao.tbk.dg.material.optional":
+            params["material_id"] = material_id
         params["sign"] = self._sign(params)
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(self.settings.tbk_api_url, params=params)

@@ -70,9 +70,12 @@ async def main() -> int:
                 break
         return 0 if has_success else 1
 
-    payload = (
-        await service._request_tbk("奶油风 沙发", "false")
-    )
+    debug_keyword = "奶油风 沙发"
+    debug_material_id = service._material_ids()[0] if service._material_ids() else None
+    print(f"query_mode=remote_keyword")
+    print(f"debug_keyword={debug_keyword}")
+    print(f"debug_material_id={debug_material_id}")
+    payload = await service._request_tbk(debug_keyword, "false", debug_material_id)
     if "error_response" in payload:
         error = payload["error_response"]
         print("TBK_ERROR")
@@ -116,10 +119,14 @@ async def main() -> int:
     print("TBK_OK")
     print(f"raw_items={len(items)}")
     if items:
-        first = items[0]
-        print(f"first_title={first.get('title')}")
-        print(f"first_price={first.get('zk_final_price')}")
-        print(f"first_image_set={bool(first.get('pict_url'))}")
+        products = [product for product in (service._map_product(item) for item in items) if product]
+        image_products = [product for product in products if product.image_url]
+        first = products[0] if products else None
+        print(f"mapped_items={len(products)}")
+        print(f"image_items={len(image_products)}")
+        print(f"first_title={first.title if first else items[0].get('title')}")
+        print(f"first_price={first.final_price if first else items[0].get('zk_final_price')}")
+        print(f"first_image_set={bool(first and first.image_url)}")
     return 0
 
 
