@@ -35,19 +35,32 @@ class TaobaoTbkService:
 
     async def _search_tbk(self, item: DesignItem, budget_max: int) -> List[Product]:
         raw_items: List[Dict[str, Any]] = []
-        for has_coupon in ["true", "false"]:
-            payload = await self._request_tbk(item.taobao_keyword, has_coupon)
+        if self.settings.tbk_search_method == "taobao.tbk.dg.material.recommend":
+            payload = await self._request_tbk_recommend()
             error = payload.get("error_response")
             if error:
-                self.last_errors.append(f"{item.name}: TBK 错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
-                continue
+                self.last_errors.append(f"{item.name}: TBK 物料精选错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
             raw_items = (
-                payload.get("tbk_dg_material_optional_response", {})
+                payload.get("tbk_dg_material_recommend_response", {})
                 .get("result_list", {})
                 .get("map_data", [])
             )
             if raw_items:
-                break
+                self.last_errors.append(f"{item.name}: 使用 taobao.tbk.dg.material.recommend 官方物料")
+        else:
+            for has_coupon in ["true", "false"]:
+                payload = await self._request_tbk(item.taobao_keyword, has_coupon)
+                error = payload.get("error_response")
+                if error:
+                    self.last_errors.append(f"{item.name}: TBK 错误 {error.get('sub_msg') or error.get('msg') or error.get('code')}")
+                    continue
+                raw_items = (
+                    payload.get("tbk_dg_material_optional_response", {})
+                    .get("result_list", {})
+                    .get("map_data", [])
+                )
+                if raw_items:
+                    break
 
         if not raw_items:
             fallback_payload = await self._request_tbk_item_get(item.taobao_keyword)
@@ -88,6 +101,32 @@ class TaobaoTbkService:
             response.raise_for_status()
             return response.json()
 
+    async def _request_tbk_recommend(self) -> Dict[str, Any]:
+        if not self.settings.tbk_material_id:
+            return {
+                "error_response": {
+                    "code": "LOCAL_MISSING_MATERIAL_ID",
+                    "msg": "TBK_MATERIAL_ID 未配置",
+                }
+            }
+        params = {
+            "method": "taobao.tbk.dg.material.recommend",
+            "app_key": self.settings.tbk_app_key,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "format": "json",
+            "v": "2.0",
+            "sign_method": "md5",
+            "adzone_id": self.settings.tbk_adzone_id,
+            "material_id": self.settings.tbk_material_id,
+            "page_no": "1",
+            "page_size": "100",
+        }
+        params["sign"] = self._sign(params)
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(self.settings.tbk_api_url, params=params)
+            response.raise_for_status()
+            return response.json()
+
     async def _request_tbk_item_get(self, keyword: str) -> Dict[str, Any]:
         params = {
             "method": "taobao.tbk.item.get",
@@ -117,21 +156,39 @@ class TaobaoTbkService:
 
     def _map_product(self, raw: Dict[str, Any]) -> Optional[Product]:
         try:
-            price = float(raw.get("zk_final_price") or raw.get("reserve_price") or 0)
-            coupon_amount = float(raw.get("coupon_amount") or 0)
-            coupon_price = max(price - coupon_amount, 0) if coupon_amount else price
-            image_url = raw.get("pict_url") or self._first_small_image(raw)
+            basic = raw.get("item_basic_info") if isinstance(raw.get("item_basic_info"), dict) else raw
+            price_info = raw.get("price_promotion_info") if isinstance(raw.get("price_promotion_info"), dict) else raw
+            publish_info = raw.get("publish_info") if isinstance(raw.get("publish_info"), dict) else raw
+            income_info = publish_info.get("income_info") if isinstance(publish_info.get("income_info"), dict) else publish_info
+            price = float(price_info.get("zk_final_price") or price_info.get("reserve_price") or basic.get("zk_final_price") or basic.get("reserve_price") or 0)
+            final_price = float(price_info.get("final_promotion_price") or price)
+            coupon_amount = max(price - final_price, 0)
+            coupon_price = final_price if final_price else max(price - coupon_amount, 0)
+            image_url = basic.get("pict_url") or basic.get("white_image") or self._first_small_image(basic)
+            item_url = (
+                publish_info.get("coupon_share_url")
+                or publish_info.get("click_url")
+                or raw.get("coupon_share_url")
+                or raw.get("url")
+                or raw.get("item_url")
+            )
+            commission_rate = (
+                income_info.get("commission_rate")
+                or publish_info.get("income_rate")
+                or raw.get("commission_rate")
+                or 0
+            )
             return Product(
-                item_id=str(raw.get("num_iid") or raw.get("item_id")),
-                title=raw.get("title") or "淘宝在售商品",
+                item_id=str(raw.get("num_iid") or raw.get("item_id") or basic.get("item_id")),
+                title=basic.get("title") or raw.get("title") or "淘宝在售商品",
                 price=price,
-                original_price=float(raw.get("reserve_price") or price),
+                original_price=float(price_info.get("reserve_price") or basic.get("reserve_price") or price),
                 coupon_price=coupon_price,
                 image_url=self._normalize_image(image_url),
-                item_url=self._normalize_url(raw.get("coupon_share_url") or raw.get("url") or raw.get("item_url")),
-                shop_name=raw.get("shop_title") or raw.get("nick") or "淘宝店铺",
-                commission_rate=float(raw.get("commission_rate") or 0) / 100,
-                sales=int(raw.get("volume") or 0),
+                item_url=self._normalize_url(item_url),
+                shop_name=basic.get("shop_title") or raw.get("shop_title") or raw.get("nick") or "淘宝店铺",
+                commission_rate=float(commission_rate) / 100,
+                sales=int(basic.get("volume") or raw.get("volume") or 0),
                 source="淘宝联盟 TBK",
                 is_realtime=True,
             )

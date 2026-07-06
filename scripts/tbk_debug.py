@@ -18,12 +18,17 @@ async def main() -> int:
     print(f"adzone_id_set={bool(settings.tbk_adzone_id)}")
     print(f"api_url={settings.tbk_api_url}")
     print(f"search_method={settings.tbk_search_method}")
+    print(f"material_id={settings.tbk_material_id}")
     print(f"app_key_len={len(settings.tbk_app_key or '')}")
     print(f"secret_len={len(settings.tbk_app_secret or '')}")
     print(f"adzone_id={settings.tbk_adzone_id}")
 
     service = TaobaoTbkService(settings)
-    payload = await service._request_tbk("奶油风 沙发", "false")
+    payload = (
+        await service._request_tbk_recommend()
+        if settings.tbk_search_method == "taobao.tbk.dg.material.recommend"
+        else await service._request_tbk("奶油风 沙发", "false")
+    )
     if "error_response" in payload:
         error = payload["error_response"]
         print("TBK_ERROR")
@@ -57,7 +62,10 @@ async def main() -> int:
         return 0
 
     items = (
-        payload.get("tbk_dg_material_optional_response", {})
+        payload.get("tbk_dg_material_recommend_response", {})
+        .get("result_list", {})
+        .get("map_data", [])
+        or payload.get("tbk_dg_material_optional_response", {})
         .get("result_list", {})
         .get("map_data", [])
     )
