@@ -555,28 +555,29 @@ class VideoService:
             draw.rounded_rectangle([72, 320, 642, 400], radius=18, fill=(255, 255, 255, 218))
             draw.text((108, 342), "待替换淘宝官方商品图", font=small_font, fill="#17211C")
 
-        draw.rectangle([0, height - 560, width, height], fill=(0, 0, 0, 124))
-        draw.rounded_rectangle([56, height - 520, width - 56, height - 122], radius=28, fill=(255, 255, 255, 232))
-        self._multiline(draw, scene["title"], 96, height - 486, title_font, "#17211C", 13, 76)
+        draw.rectangle([0, height - 700, width, height - 90], fill=(0, 0, 0, 124))
+        draw.rounded_rectangle([56, height - 660, width - 56, height - 230], radius=28, fill=(255, 255, 255, 232))
+        self._multiline(draw, scene["title"], 96, height - 626, title_font, "#17211C", 13, 76)
 
         material_line = f"材质：{scene.get('material', '')}    尺寸：{scene.get('size', '')}"
-        self._multiline(draw, material_line, 96, height - 372, body_font, "#17211C", 22, 50)
+        self._multiline(draw, material_line, 96, height - 512, body_font, "#17211C", 22, 50)
 
         role_line = f"搭配作用：{scene.get('role', '')}"
-        self._multiline(draw, role_line, 96, height - 302, body_font, "#17211C", 20, 50)
+        self._multiline(draw, role_line, 96, height - 442, body_font, "#17211C", 20, 50)
 
         product_title = scene.get("product_title") or ""
         if product_title:
-            self._multiline(draw, product_title, 96, height - 236, small_font, "#4D4B45", 31, 34)
+            self._multiline(draw, product_title, 96, height - 376, small_font, "#4D4B45", 31, 34)
 
-        draw.rounded_rectangle([96, height - 184, width - 96, height - 108], radius=18, fill=accent)
-        self._multiline(draw, scene["price"], 128, height - 170, price_font, "#FFFFFF", 13, 62)
+        compact_price_font = self._font(46)
+        draw.rounded_rectangle([96, height - 302, width - 96, height - 230], radius=18, fill=accent)
+        self._multiline(draw, scene["price"], 128, height - 292, compact_price_font, "#FFFFFF", 16, 50)
 
         if scene.get("is_realtime"):
             meta = f"{scene.get('shop', '')}｜销量 {scene.get('sales', 0)}｜{scene.get('source', '')}"
         else:
             meta = "淘宝客物料权限通过后自动替换真实商品图和链接"
-        self._multiline(draw, meta, 96, height - 78, small_font, "#FFFFFF", 30, 32)
+        self._multiline(draw, meta, 96, height - 178, small_font, "#FFFFFF", 30, 32)
 
     def _draw_product_scene(
         self,

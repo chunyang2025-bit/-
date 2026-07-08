@@ -46,7 +46,7 @@ class TaobaoTbkService:
         raw_items: List[Dict[str, Any]] = []
         if self.settings.tbk_search_method == TBK_RECOMMEND_METHOD:
             return await self._search_recommend_products(item, budget_max)
-        else:
+        elif self.settings.tbk_search_method in TBK_OPTIONAL_METHODS:
             optional_request_failed = False
             material_ids: List[Optional[str]] = self._material_ids() or [None]
             for material_id in material_ids:
@@ -63,16 +63,25 @@ class TaobaoTbkService:
                         continue
                     raw_items = self._extract_map_data(payload)
                     if raw_items:
+                        products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
+                        relevant_products = self._relevant_products(products, item)
+                        if not relevant_products and products:
+                            suffix = f" material_id={material_id}" if material_id else ""
+                            self.last_errors.append(f"{item.name}: optional 返回商品但未命中单品关键词，已跳过{suffix}")
+                            continue
+                        filtered = self._filter_products(relevant_products, item, budget_max)
+                        if filtered:
+                            suffix = f" material_id={material_id}" if material_id else ""
+                            self.last_errors.append(
+                                f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索{suffix}"
+                            )
+                            return filtered
                         suffix = f" material_id={material_id}" if material_id else ""
-                        self.last_errors.append(
-                            f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索{suffix}"
-                        )
-                        break
-                if raw_items:
-                    break
+                        self.last_errors.append(f"{item.name}: optional 有返回但未匹配预算/图片/销量{suffix}")
             if not raw_items and optional_request_failed:
                 self.last_errors.append(f"{item.name}: optional 接口暂不可用，自动回退 taobao.tbk.dg.material.recommend")
                 return await self._search_recommend_products(item, budget_max)
+            return []
 
         if not raw_items and self.settings.tbk_search_method not in {
             TBK_RECOMMEND_METHOD,
