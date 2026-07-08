@@ -51,33 +51,37 @@ class TaobaoTbkService:
             material_ids: List[Optional[str]] = self._material_ids() or [None]
             for material_id in material_ids:
                 for has_coupon in ["true", "false"]:
-                    payload = await self._request_tbk(item.taobao_keyword, has_coupon, material_id)
-                    error = payload.get("error_response")
-                    if error:
-                        optional_request_failed = True
-                        suffix = f" material_id={material_id}" if material_id else ""
-                        self.last_errors.append(
-                            f"{item.name}: TBK optional 错误{suffix} "
-                            f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
-                        )
-                        continue
-                    raw_items = self._extract_map_data(payload)
-                    if raw_items:
+                    for page_no in range(1, self.settings.tbk_page_count + 1):
+                        payload = await self._request_tbk(item.taobao_keyword, has_coupon, material_id, page_no)
+                        error = payload.get("error_response")
+                        if error:
+                            optional_request_failed = True
+                            suffix = f" material_id={material_id}" if material_id else ""
+                            self.last_errors.append(
+                                f"{item.name}: TBK optional 错误{suffix} "
+                                f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
+                            )
+                            continue
+                        raw_items = self._extract_map_data(payload)
+                        if not raw_items:
+                            continue
                         products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
                         relevant_products = self._relevant_products(products, item)
                         if not relevant_products and products:
                             suffix = f" material_id={material_id}" if material_id else ""
-                            self.last_errors.append(f"{item.name}: optional 返回商品但未命中单品关键词，已跳过{suffix}")
+                            self.last_errors.append(
+                                f"{item.name}: optional 第{page_no}页返回商品但未命中单品关键词，已跳过{suffix}"
+                            )
                             continue
                         filtered = self._filter_products(relevant_products, item, budget_max)
                         if filtered:
                             suffix = f" material_id={material_id}" if material_id else ""
                             self.last_errors.append(
-                                f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索{suffix}"
+                                f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索{suffix} page={page_no}"
                             )
                             return filtered
                         suffix = f" material_id={material_id}" if material_id else ""
-                        self.last_errors.append(f"{item.name}: optional 有返回但未匹配预算/图片/销量{suffix}")
+                        self.last_errors.append(f"{item.name}: optional 第{page_no}页有返回但未匹配预算/图片/销量{suffix}")
             if not raw_items and optional_request_failed:
                 self.last_errors.append(f"{item.name}: optional 接口暂不可用，自动回退 taobao.tbk.dg.material.recommend")
                 return await self._search_recommend_products(item, budget_max)
@@ -136,6 +140,7 @@ class TaobaoTbkService:
         keyword: str,
         has_coupon: str,
         material_id: Optional[str] = None,
+        page_no: int = 1,
     ) -> Dict[str, Any]:
         params = {
             "method": self.settings.tbk_search_method,
@@ -146,7 +151,8 @@ class TaobaoTbkService:
             "sign_method": "md5",
             "adzone_id": self.settings.tbk_effective_adzone_id,
             "q": keyword,
-            "page_size": "20",
+            "page_no": str(page_no),
+            "page_size": str(self.settings.tbk_page_size),
             "sort": "total_sales_des",
             "platform": "2",
             "has_coupon": has_coupon,

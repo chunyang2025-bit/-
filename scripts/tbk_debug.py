@@ -20,6 +20,8 @@ async def main() -> int:
     print(f"search_method={settings.tbk_search_method}")
     print(f"material_id={settings.tbk_material_id}")
     print(f"pid={settings.tbk_pid}")
+    print(f"page_size={settings.tbk_page_size}")
+    print(f"page_count={settings.tbk_page_count}")
     print(f"app_key_len={len(settings.tbk_app_key or '')}")
     print(f"secret_len={len(settings.tbk_app_secret or '')}")
     print(f"site_id={settings.tbk_effective_site_id}")

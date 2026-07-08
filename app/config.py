@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     tbk_min_commission_rate: int = 1000
     tbk_min_sales: int = 20
     tbk_strict_filters: bool = False
+    tbk_page_size: int = Field(default=100, ge=1, le=100)
+    tbk_page_count: int = Field(default=3, ge=1, le=10)
 
     render_provider: str = "demo"
     render_api_url: Optional[str] = None
