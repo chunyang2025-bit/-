@@ -244,37 +244,42 @@ class TaobaoTbkService:
         return []
 
     def _relevant_products(self, products: List[Product], item: DesignItem) -> List[Product]:
-        tokens = self._relevance_tokens(item)
-        if not tokens:
+        groups = self._required_relevance_groups(item)
+        if not groups:
             return products
-        return [
-            product
-            for product in products
-            if any(token in f"{product.title} {product.shop_name}" for token in tokens)
-        ]
+        relevant = []
+        for product in products:
+            title = f"{product.title} {product.shop_name}"
+            if any(any(token in title for token in group) for group in groups):
+                relevant.append(product)
+        return relevant
 
     @staticmethod
-    def _relevance_tokens(item: DesignItem) -> List[str]:
+    def _required_relevance_groups(item: DesignItem) -> List[List[str]]:
         text = f"{item.name} {item.material} {item.scene} {item.taobao_keyword}"
-        seeds = [
-            "沙发",
-            "茶几",
-            "桌",
-            "柜",
-            "灯",
-            "窗帘",
-            "地毯",
-            "床",
-            "椅",
-            "置物",
-            "收纳",
-            "挂画",
-            "抱枕",
-            "床品",
-            "镜",
-            "餐具",
+        category_groups = [
+            (["沙发"], ["沙发"]),
+            (["茶几"], ["茶几", "边几", "咖啡桌", "小圆桌", "客厅桌"]),
+            (["落地灯"], ["落地灯", "立灯"]),
+            (["台灯"], ["台灯", "床头灯"]),
+            (["吊灯"], ["吊灯", "吸顶灯", "灯具"]),
+            (["灯"], ["灯", "灯具", "落地灯", "台灯", "吊灯", "吸顶灯"]),
+            (["窗帘"], ["窗帘", "纱帘", "遮光帘", "帘"]),
+            (["地毯"], ["地毯", "毯", "客厅毯"]),
+            (["置物架"], ["置物架", "收纳架", "层架", "架子"]),
+            (["挂画"], ["挂画", "装饰画", "壁画"]),
+            (["抱枕"], ["抱枕", "靠垫", "靠枕"]),
+            (["床品", "床笠", "四件套"], ["床品", "床笠", "四件套", "被套"]),
+            (["镜"], ["镜", "穿衣镜", "全身镜"]),
+            (["餐具"], ["餐具", "碗", "盘", "杯"]),
+            (["柜"], ["柜", "边柜", "斗柜", "电视柜", "收纳柜"]),
+            (["椅"], ["椅", "餐椅", "休闲椅"]),
+            (["床"], ["床", "床架"]),
         ]
-        return [token for token in seeds if token in text]
+        groups = [tokens for triggers, tokens in category_groups if any(trigger in text for trigger in triggers)]
+        if not groups and "收纳" in text:
+            groups.append(["收纳箱", "收纳盒", "收纳柜", "置物架", "收纳架", "储物柜"])
+        return groups
 
     def _map_product(self, raw: Dict[str, Any]) -> Optional[Product]:
         try:
