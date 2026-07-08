@@ -15,7 +15,7 @@ async def main() -> int:
     print("TBK_DEBUG")
     print(f"app_key_set={bool(settings.tbk_app_key)}")
     print(f"app_secret_set={bool(settings.tbk_app_secret)}")
-    print(f"adzone_id_set={bool(settings.tbk_adzone_id)}")
+    print(f"adzone_id_set={bool(settings.tbk_effective_adzone_id)}")
     print(f"api_url={settings.tbk_api_url}")
     print(f"search_method={settings.tbk_search_method}")
     print(f"material_id={settings.tbk_material_id}")

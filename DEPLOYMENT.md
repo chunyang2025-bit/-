@@ -40,8 +40,12 @@ OPENAI_API_KEY=replace-me
 OPENAI_MODEL=replace-with-approved-model
 TBK_APP_KEY=replace-me
 TBK_APP_SECRET=replace-me
-TBK_ADZONE_ID=replace-me
+TBK_PID=mm_xxxxxxxxxx_xxxxxxxxxx_xxxxxxxxxx
+TBK_SEARCH_METHOD=taobao.tbk.dg.material.optional.upgrade
+TBK_MATERIAL_ID=31362
 ```
+
+`TBK_PID` 推荐填写完整三段式推广位，系统会自动拆出 `site_id` 和 `adzone_id`。如果不填完整 PID，也可以手动填写 `TBK_SITE_ID` 和 `TBK_ADZONE_ID`。旧版 `taobao.tbk.dg.material.optional` 已下线，请使用 `taobao.tbk.dg.material.optional.upgrade`。
 
 DeepSeek 兼容配置示例：
 

@@ -92,6 +92,18 @@ python scripts/tbk_debug.py
 
 重点检查 `.env` 中 `TBK_APP_SECRET` 是否复制错误、包含空格、或与 `TBK_APP_KEY` 不匹配。
 
+淘宝客关键词搜索请使用新版接口：
+
+```env
+TBK_SEARCH_METHOD=taobao.tbk.dg.material.optional.upgrade
+TBK_PID=mm_xxxxxxxxxx_xxxxxxxxxx_xxxxxxxxxx
+TBK_ADZONE_ID=
+TBK_SITE_ID=
+TBK_MATERIAL_ID=31362
+```
+
+系统会从完整 `TBK_PID` 自动拆出 `site_id` 和 `adzone_id`；也可以继续手动填写 `TBK_SITE_ID` / `TBK_ADZONE_ID`。如升级版接口暂不可用，系统会自动回退到 `taobao.tbk.dg.material.recommend`，保证链路不中断。
+
 Ubuntu 服务器可直接运行：
 
 ```bash
@@ -104,7 +116,9 @@ bash scripts/server_setup.sh
 - `OPENAI_MODEL`：结构化方案模型，建议按企业账号可用模型配置。
 - `OPENAI_TTS_MODEL`：配音模型，留空时使用代码默认值。
 - `OPENAI_BASE_URL`：兼容 OpenAI Chat Completions 的服务地址。使用 DeepSeek 时填 `https://api.deepseek.com/v1`，`OPENAI_MODEL=deepseek-chat`。
-- `TBK_APP_KEY` / `TBK_APP_SECRET` / `TBK_ADZONE_ID`：淘宝联盟 TOP/TBK 必填凭证。
+- `TBK_APP_KEY` / `TBK_APP_SECRET` / `TBK_PID`：淘宝联盟 TOP/TBK 必填凭证。`TBK_PID` 支持完整三段式 `mm_..._..._...`，系统会自动解析推广位。
+- `TBK_SEARCH_METHOD`：默认 `taobao.tbk.dg.material.optional.upgrade`，旧版 `taobao.tbk.dg.material.optional` 已下线。
+- `TBK_MATERIAL_ID`：官方物料 ID，请使用淘宝联盟官方物料 ID，不要填写资源包、订单或后台页面 ID。
 - `TBK_MIN_COMMISSION_RATE`：最低佣金比例，默认 `1000`，即 10%。
 - `TBK_MIN_SALES`：最低销量过滤阈值。
 - `RATE_LIMIT_PER_MINUTE`：单 IP 每分钟 API 调用限制。

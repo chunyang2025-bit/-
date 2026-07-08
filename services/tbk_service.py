@@ -13,6 +13,7 @@ from app.models import DesignItem, Product, ProductMatch
 TBK_RECOMMEND_METHOD = "taobao.tbk.dg.material.recommend"
 TBK_OPTIONAL_METHODS = {
     "taobao.tbk.dg.material.optional",
+    "taobao.tbk.dg.material.optional.upgrade",
     "taobao.tbk.dg.material.temporary.optional",
 }
 
@@ -213,6 +214,7 @@ class TaobaoTbkService:
     def _extract_map_data(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         response_keys = [
             "tbk_dg_material_optional_response",
+            "tbk_dg_material_optional_upgrade_response",
             "tbk_dg_material_temporary_optional_response",
             "tbk_dg_material_recommend_response",
         ]
