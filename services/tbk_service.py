@@ -49,39 +49,42 @@ class TaobaoTbkService:
         elif self.settings.tbk_search_method in TBK_OPTIONAL_METHODS:
             optional_request_failed = False
             material_ids: List[Optional[str]] = self._material_ids() or [None]
-            for material_id in material_ids:
-                for has_coupon in ["true", "false"]:
-                    for page_no in range(1, self.settings.tbk_page_count + 1):
-                        payload = await self._request_tbk(item.taobao_keyword, has_coupon, material_id, page_no)
-                        error = payload.get("error_response")
-                        if error:
-                            optional_request_failed = True
+            for keyword in self._search_keywords(item):
+                for material_id in material_ids:
+                    for has_coupon in ["true", "false"]:
+                        for page_no in range(1, self.settings.tbk_page_count + 1):
+                            payload = await self._request_tbk(keyword, has_coupon, material_id, page_no)
+                            error = payload.get("error_response")
+                            if error:
+                                optional_request_failed = True
+                                suffix = f" material_id={material_id}" if material_id else ""
+                                self.last_errors.append(
+                                    f"{item.name}: TBK optional 错误 keyword={keyword}{suffix} "
+                                    f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
+                                )
+                                continue
+                            raw_items = self._extract_map_data(payload)
+                            if not raw_items:
+                                continue
+                            products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
+                            relevant_products = self._relevant_products(products, item)
+                            if not relevant_products and products:
+                                suffix = f" material_id={material_id}" if material_id else ""
+                                self.last_errors.append(
+                                    f"{item.name}: optional keyword={keyword} 第{page_no}页返回商品但未命中单品关键词，已跳过{suffix}"
+                                )
+                                continue
+                            filtered = self._filter_products(relevant_products, item, budget_max)
+                            if filtered:
+                                suffix = f" material_id={material_id}" if material_id else ""
+                                self.last_errors.append(
+                                    f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索 keyword={keyword}{suffix} page={page_no}"
+                                )
+                                return filtered
                             suffix = f" material_id={material_id}" if material_id else ""
                             self.last_errors.append(
-                                f"{item.name}: TBK optional 错误{suffix} "
-                                f"{error.get('sub_msg') or error.get('msg') or error.get('code')}"
+                                f"{item.name}: optional keyword={keyword} 第{page_no}页有返回但未匹配预算/图片/销量{suffix}"
                             )
-                            continue
-                        raw_items = self._extract_map_data(payload)
-                        if not raw_items:
-                            continue
-                        products = [p for p in (self._map_product(raw) for raw in raw_items) if p]
-                        relevant_products = self._relevant_products(products, item)
-                        if not relevant_products and products:
-                            suffix = f" material_id={material_id}" if material_id else ""
-                            self.last_errors.append(
-                                f"{item.name}: optional 第{page_no}页返回商品但未命中单品关键词，已跳过{suffix}"
-                            )
-                            continue
-                        filtered = self._filter_products(relevant_products, item, budget_max)
-                        if filtered:
-                            suffix = f" material_id={material_id}" if material_id else ""
-                            self.last_errors.append(
-                                f"{item.name}: 使用 {self.settings.tbk_search_method} 关键词搜索{suffix} page={page_no}"
-                            )
-                            return filtered
-                        suffix = f" material_id={material_id}" if material_id else ""
-                        self.last_errors.append(f"{item.name}: optional 第{page_no}页有返回但未匹配预算/图片/销量{suffix}")
             if not raw_items and optional_request_failed:
                 self.last_errors.append(f"{item.name}: optional 接口暂不可用，自动回退 taobao.tbk.dg.material.recommend")
                 return await self._search_recommend_products(item, budget_max)
@@ -224,6 +227,37 @@ class TaobaoTbkService:
     def _material_ids(self) -> List[str]:
         raw = self.settings.tbk_material_id or ""
         return [part.strip() for part in re.split(r"[,，\s]+", raw) if part.strip()]
+
+    def _search_keywords(self, item: DesignItem) -> List[str]:
+        text = f"{item.name} {item.scene} {item.taobao_keyword}"
+        keyword_groups = [
+            (["沙发"], ["沙发", "模块沙发", "客厅沙发"]),
+            (["茶几"], ["茶几", "边几", "客厅茶几", "小圆桌"]),
+            (["落地灯"], ["落地灯", "客厅落地灯", "立灯"]),
+            (["台灯"], ["台灯", "床头灯"]),
+            (["吊灯"], ["吊灯", "吸顶灯", "客厅灯"]),
+            (["灯"], ["灯具", "客厅灯", "落地灯"]),
+            (["窗帘"], ["窗帘", "纱帘", "遮光帘"]),
+            (["地毯"], ["地毯", "客厅地毯", "地垫"]),
+            (["置物架"], ["置物架", "收纳架", "层架"]),
+            (["挂画"], ["挂画", "装饰画"]),
+            (["抱枕"], ["抱枕", "靠垫"]),
+            (["床品", "床笠", "四件套"], ["床品", "床笠", "四件套"]),
+            (["镜"], ["穿衣镜", "全身镜", "镜子"]),
+            (["餐具"], ["餐具", "碗盘", "杯具"]),
+            (["柜"], ["收纳柜", "边柜", "斗柜", "电视柜"]),
+            (["椅"], ["椅子", "餐椅", "休闲椅"]),
+            (["床"], ["床", "床架"]),
+        ]
+        keywords: List[str] = []
+        for triggers, values in keyword_groups:
+            if any(trigger in text for trigger in triggers):
+                keywords.extend(values)
+                break
+        if not keywords and "收纳" in text:
+            keywords.extend(["收纳柜", "收纳架", "收纳箱"])
+        keywords.append(item.taobao_keyword)
+        return list(dict.fromkeys(keyword for keyword in keywords if keyword))
 
     @staticmethod
     def _extract_map_data(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
