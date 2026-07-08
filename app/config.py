@@ -99,6 +99,8 @@ class Settings(BaseSettings):
     def strip_env_strings(cls, value):
         if isinstance(value, str):
             value = value.strip()
+            if "=" in value:
+                value = value.split("=", 1)[1].strip()
             return value or None
         return value
 
