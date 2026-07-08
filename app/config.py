@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     openai_model: Optional[str] = None
     openai_tts_model: Optional[str] = None
 
+    product_provider: str = "tbk"
+
     tbk_app_key: Optional[str] = None
     tbk_app_secret: Optional[str] = None
     tbk_adzone_id: Optional[str] = None
@@ -74,6 +76,7 @@ class Settings(BaseSettings):
         "openai_base_url",
         "openai_model",
         "openai_tts_model",
+        "product_provider",
         "tbk_app_key",
         "tbk_app_secret",
         "tbk_adzone_id",

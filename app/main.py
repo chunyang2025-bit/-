@@ -31,8 +31,8 @@ from services.copy_service import CopyService
 from services.design_service import DesignService
 from services.excel_service import ExcelService
 from services.logging_service import ComplianceLogger
+from services.product_provider import build_product_provider
 from services.render_service import RenderService
-from services.tbk_service import TaobaoTbkService
 from services.video_service import VideoService
 
 
@@ -41,7 +41,7 @@ logger = ComplianceLogger(settings)
 rate_limiter = InMemoryRateLimiter(settings.rate_limit_per_minute)
 
 design_service = DesignService(settings)
-tbk_service = TaobaoTbkService(settings)
+product_provider = build_product_provider(settings)
 budget_service = BudgetService()
 excel_service = ExcelService(settings)
 video_service = VideoService(settings)
@@ -103,6 +103,7 @@ async def health() -> Dict[str, Any]:
         "env": settings.app_env,
         "openai_configured": settings.has_openai,
         "tbk_configured": settings.has_tbk,
+        "product_provider": product_provider.name,
         "ffmpeg_available": bool(shutil.which("ffmpeg")),
     }
 
@@ -116,9 +117,9 @@ async def generate_design(payload: GenerateRequest) -> DesignPlan:
 
 @app.post("/api/search_products", response_model=ProductSearchResponse, dependencies=[Depends(limited)])
 async def search_products(payload: ProductSearchRequest) -> ProductSearchResponse:
-    matches = await tbk_service.search_matches(payload.design_plan.items, payload.budget_max)
+    matches = await product_provider.search_matches(payload.design_plan.items, payload.budget_max)
     realtime = bool(matches and all(product.is_realtime for match in matches for product in match.products))
-    source_note = "淘宝联盟 TBK 实时商品" if realtime else "演示商品数据；配置 TBK 后自动切换为实时商品"
+    source_note = product_provider.source_note if realtime else "演示商品数据；配置商品源后自动切换为实时商品"
     logger.write(
         "products_matched",
         {"items": len(matches), "realtime": realtime, "products": sum(len(match.products) for match in matches)},
@@ -213,15 +214,15 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
     warnings = []
     design_plan = await design_service.generate(payload)
     render = await render_service.generate(payload, design_plan)
-    matches = await tbk_service.search_matches(design_plan.items, payload.budget_max)
+    matches = await product_provider.search_matches(design_plan.items, payload.budget_max)
     realtime = bool(matches and all(product.is_realtime for match in matches for product in match.products))
     if not realtime:
-        if settings.has_tbk:
-            warnings.append("TBK 已配置，但本次没有匹配到符合条件的实时商品，已回退演示数据。")
+        if product_provider.is_configured:
+            warnings.append("商品源已配置，但本次没有匹配到符合条件的实时商品，已回退演示数据。")
         else:
-            warnings.append("当前未配置完整 TBK 凭证，商品为演示数据；上线前必须配置淘宝联盟实时 API。")
-    if tbk_service.last_errors:
-        warnings.extend(tbk_service.last_errors[:5])
+            warnings.append("当前未配置完整商品源凭证，商品为演示数据；上线前必须配置实时商品 API。")
+    if product_provider.last_errors:
+        warnings.extend(product_provider.last_errors[:5])
     image_count = sum(1 for match in matches for product in match.products if product.image_url)
     if image_count == 0:
         warnings.append("本次商品未获取到官方商品图，视频会显示占位画面；请检查 TBK 返回字段或筛选条件。")
@@ -231,7 +232,7 @@ async def run_full_pipeline(payload: GenerateRequest) -> FullPipelineResponse:
     products = ProductSearchResponse(
         matches=matches,
         realtime=realtime,
-        source_note="淘宝联盟 TBK 实时商品" if realtime else "演示商品数据；配置 TBK 后自动切换为实时商品",
+        source_note=product_provider.source_note if realtime else "演示商品数据；配置商品源后自动切换为实时商品",
     )
     budget = budget_service.calculate(matches)
     video = await video_service.generate(payload, design_plan, matches, budget, render)
